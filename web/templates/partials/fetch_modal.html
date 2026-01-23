@@ -1,0 +1,38 @@
+<div id="fetch-modal" class="fixed inset-0 z-50">
+  <div class="absolute inset-0 bg-slate-900/40" hx-get="/partials/close_modal" hx-target="#fetch-modal" hx-swap="outerHTML"></div>
+  <div class="absolute inset-0 flex items-center justify-center p-4">
+    <div class="w-full max-w-lg bg-white rounded-2xl border shadow-xl overflow-hidden">
+      <div class="px-5 py-4 border-b flex items-center justify-between">
+        <div class="font-semibold">手动拉取并解析</div>
+        <button class="text-slate-500 hover:text-slate-900" hx-get="/partials/close_modal" hx-target="#fetch-modal" hx-swap="outerHTML">✕</button>
+      </div>
+
+      <div class="p-5 space-y-4">
+        <div class="text-sm text-slate-600">
+          将从 Gmail 指定标签拉取邮件，并用 AI 输出「待处理/无需处理」。
+        </div>
+
+        <form hx-post="/api/fetch_parse/start" hx-target="#fetch-progress" hx-swap="innerHTML" class="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+          <div class="md:col-span-2">
+            <label class="text-xs text-slate-500">Gmail 标签（可选）</label>
+            <input name="label" class="mt-1 w-full border rounded-lg px-3 py-2" value="{{ label or '' }}" placeholder="Support收件" />
+          </div>
+          <div>
+            <label class="text-xs text-slate-500">拉取数量</label>
+            <input name="limit" type="number" min="1" max="500" value="50" class="mt-1 w-full border rounded-lg px-3 py-2" />
+          </div>
+          <div class="md:col-span-3 flex justify-end">
+            <button class="px-3 py-2 rounded-lg bg-slate-900 text-white hover:bg-slate-800" type="submit">开始拉取并解析</button>
+          </div>
+        </form>
+
+        <div id="fetch-progress"></div>
+
+        <div class="pt-2 flex items-center justify-end gap-2">
+          <a href="/emails" class="px-3 py-2 rounded-lg bg-white border hover:bg-slate-50 text-sm">去列表</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+

@@ -1,0 +1,58 @@
+{# 这个 partial 会被 /api/triage/batch/start 和 /api/triage/batch/status/{job_id} 重复返回 #}
+<div
+  class="space-y-3"
+  {% if not job.finished %}
+    hx-get="{{ request.url_for('api_batch_status', job_id=job.job_id) }}"
+    hx-trigger="every 1s"
+    hx-swap="outerHTML"
+  {% endif %}
+>
+  <div class="flex items-center justify-between gap-3">
+    <div class="text-sm">
+      <span class="font-medium">Job</span>
+      <span class="font-mono text-xs">{{ job.job_id }}</span>
+    </div>
+    <div class="text-sm text-slate-700">
+      进度：<span class="font-medium">{{ job.done }}</span> / {{ job.total }}
+      {% if job.finished %}
+        <span class="ml-2 inline-flex items-center px-2 py-1 rounded-md bg-emerald-100 text-emerald-800">完成</span>
+      {% else %}
+        <span class="ml-2 inline-flex items-center px-2 py-1 rounded-md bg-amber-100 text-amber-800">进行中</span>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if job.results|length > 0 %}
+    <div class="border rounded-xl overflow-hidden">
+      <table class="min-w-full text-sm">
+        <thead class="bg-slate-50 text-slate-600">
+          <tr>
+            <th class="text-left font-medium px-4 py-2">email_id</th>
+            <th class="text-left font-medium px-4 py-2">状态</th>
+            <th class="text-left font-medium px-4 py-2">错误</th>
+            <th class="text-left font-medium px-4 py-2"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in job.results %}
+            <tr class="border-t">
+              <td class="px-4 py-2 font-mono text-xs">{{ r.email_id }}</td>
+              <td class="px-4 py-2">
+                {% if r.ok %}
+                  <span class="inline-flex items-center px-2 py-1 rounded-md bg-emerald-100 text-emerald-800">OK</span>
+                {% else %}
+                  <span class="inline-flex items-center px-2 py-1 rounded-md bg-rose-100 text-rose-800">FAIL</span>
+                {% endif %}
+              </td>
+              <td class="px-4 py-2 text-slate-700 break-words">{{ r.error or "" }}</td>
+              <td class="px-4 py-2 whitespace-nowrap">
+                <a class="text-sky-700 underline" href="{{ request.url_for('email_detail', email_id=r.email_id) }}">查看</a>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+</div>
+

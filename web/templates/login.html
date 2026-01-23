@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="max-w-xl mx-auto">
+    <div class="bg-white border rounded-2xl overflow-hidden">
+      <div class="px-6 py-6 border-b">
+        <div class="text-xl font-semibold">登录 Gmail</div>
+        <div class="text-sm text-slate-600 mt-2">
+          连接你的 Gmail 后，才能拉取指定标签邮件并进行 AI 分流。
+        </div>
+      </div>
+
+      <div class="p-6 space-y-4">
+        {% if error %}
+          <div class="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-800">{{ error }}</div>
+        {% endif %}
+
+        {% if token_exists %}
+          <div class="p-3 rounded-lg bg-slate-50 border text-slate-800 text-sm">
+            检测到本机已有授权凭证。点击下方按钮继续进入产品。
+            <div class="text-xs text-slate-500 mt-1">（不会自动进入，必须由你点击确认。）</div>
+          </div>
+        {% endif %}
+
+        <a
+          href="/auth/gmail"
+          class="inline-flex items-center justify-center w-full px-4 py-3 rounded-xl bg-slate-900 text-white hover:bg-slate-800"
+        >
+          登录 Gmail
+        </a>
+
+        <div class="text-xs text-slate-500">
+          如果你是首次使用，请先确保本地存在 <span class="font-mono">secrets/gmail_credentials.json</span>。
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}
+

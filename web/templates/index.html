@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="bg-white border rounded-xl overflow-hidden">
+    <div class="px-4 py-3 border-b flex items-center justify-between gap-3 flex-wrap">
+      <div class="space-y-1">
+        <div class="font-medium">邮件列表（out/emails）</div>
+        <div class="text-sm text-slate-600">
+          视图：
+          <a class="underline {% if show == 'todo' %}font-semibold{% endif %}" href="/?show=todo">待处理({{ counts.todo }})</a>
+          · <a class="underline {% if show == 'candidate' %}font-semibold{% endif %}" href="/?show=candidate">候选({{ counts.candidate }})</a>
+          · <a class="underline {% if show == 'jira' %}font-semibold{% endif %}" href="/?show=jira">Jira({{ counts.jira }})</a>
+          · <a class="underline {% if show == 'skip' %}font-semibold{% endif %}" href="/?show=skip">跳过({{ counts.skip }})</a>
+          · <a class="underline {% if show == 'done' %}font-semibold{% endif %}" href="/?show=done">已处理({{ counts.done }})</a>
+          · <a class="underline {% if show == 'all' %}font-semibold{% endif %}" href="/?show=all">全部({{ counts.all }})</a>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <a href="/work?scope=candidate" class="px-3 py-2 rounded-lg bg-slate-900 text-white hover:bg-slate-800">开始处理</a>
+      </div>
+    </div>
+
+    {% if emails|length == 0 %}
+      <div class="p-6 text-slate-600">
+        未找到邮件文件：请先运行 `fetch_full.py` 生成 `out/emails/*.json`。
+      </div>
+    {% else %}
+      <div class="overflow-x-auto">
+        <table class="w-full table-fixed text-sm">
+          <thead class="bg-slate-50 text-slate-600">
+            <tr>
+              <th class="text-left font-medium px-4 py-2 w-[10rem]">状态</th>
+              <th class="text-left font-medium px-4 py-2 w-[40%]">Subject</th>
+              <th class="text-left font-medium px-4 py-2 w-[28%]">From</th>
+              <th class="text-left font-medium px-4 py-2 w-[12rem]">Date</th>
+              <th class="text-left font-medium px-4 py-2 w-[6rem]">附件</th>
+              <th class="text-left font-medium px-4 py-2 w-[6.5rem]"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for e in emails %}
+              <tr class="border-t hover:bg-slate-50">
+                <td class="px-4 py-3 whitespace-nowrap">
+                  {% if e.status == "jira" %}
+                    <span class="inline-flex items-center px-2 py-1 rounded-md bg-emerald-100 text-emerald-800">Jira</span>
+                  {% elif e.status == "skip" %}
+                    <span class="inline-flex items-center px-2 py-1 rounded-md bg-slate-100 text-slate-700">跳过</span>
+                  {% elif e.status == "done" %}
+                    <span class="inline-flex items-center px-2 py-1 rounded-md bg-indigo-100 text-indigo-800">已处理</span>
+                  {% else %}
+                    <span class="inline-flex items-center px-2 py-1 rounded-md bg-amber-100 text-amber-800">待处理</span>
+                  {% endif %}
+                  {% if not e.triage_exists %}
+                    <span class="ml-1 inline-flex items-center px-2 py-1 rounded-md bg-slate-50 text-slate-600 border">未 triage</span>
+                  {% endif %}
+                </td>
+                <td class="px-4 py-3 break-words" title="{{ e.subject }}">{{ e.subject }}</td>
+                <td class="px-4 py-3 break-words" title="{{ e.from_email }}">{{ e.from_email }}</td>
+                <td class="px-4 py-3 whitespace-nowrap">{{ e.date_display or "-" }}</td>
+                <td class="px-4 py-3 whitespace-nowrap">
+                  {% if e.has_attachments %}
+                    <span class="inline-flex items-center px-2 py-1 rounded-md bg-amber-100 text-amber-800">有</span>
+                  {% else %}
+                    <span class="inline-flex items-center px-2 py-1 rounded-md bg-slate-100 text-slate-600">无</span>
+                  {% endif %}
+                </td>
+                <td class="px-4 py-3 whitespace-nowrap">
+                  <a
+                    class="px-3 py-2 rounded-lg bg-slate-900 text-white hover:bg-slate-800"
+                    href="{{ request.url_for('email_detail', email_id=e.email_id) }}"
+                  >查看</a>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+  </div>
+{% endblock %}
+

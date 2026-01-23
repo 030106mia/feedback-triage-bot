@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="bg-white border rounded-xl overflow-hidden">
+    <div class="px-4 py-3 border-b flex items-center justify-between gap-3">
+      <div class="font-medium">快速处理（目标：10 分钟处理完“值得进 Jira”的反馈）</div>
+      <div class="flex items-center gap-2">
+        <a href="/work?scope=candidate" class="px-3 py-2 rounded-lg bg-white border hover:bg-slate-50 {% if scope == 'candidate' %}font-semibold{% endif %}">候选</a>
+        <a href="/work?scope=todo" class="px-3 py-2 rounded-lg bg-white border hover:bg-slate-50 {% if scope == 'todo' %}font-semibold{% endif %}">全部待处理</a>
+      </div>
+    </div>
+
+    <div class="p-4">
+      {% include "partials/work_item.html" %}
+    </div>
+  </div>
+{% endblock %}
+

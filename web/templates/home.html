@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="bg-white border rounded-xl overflow-hidden">
+    <div class="px-5 py-5 border-b">
+      <div class="text-lg font-semibold">开始使用</div>
+      <div class="text-sm text-slate-600 mt-1">先完成基础配置，然后点击「手动拉取并解析」开始分流。</div>
+    </div>
+
+    <div class="p-4 space-y-4">
+      {% if read_only %}
+        <div class="p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-900">
+          当前处于只读模式（例如 Vercel）。本产品的“拉取/解析/状态流转”需要持久化，建议本地运行或接外部存储。
+        </div>
+      {% endif %}
+
+      <div class="border rounded-xl p-4">
+        <div class="font-medium mb-2">Gmail 登录</div>
+        {% if token_exists %}
+          <div class="text-sm text-emerald-700">已登录（检测到 secrets/gmail_token.json）</div>
+        {% else %}
+          <div class="text-sm text-slate-700">
+            未登录。请先运行 <span class="font-mono text-xs">python authorize_gmail.py</span> 完成授权（会打开浏览器）。
+          </div>
+        {% endif %}
+      </div>
+
+      <form id="setup-form" action="/api/settings/save" method="post" class="space-y-6">
+        <div class="border rounded-xl p-4">
+          <div class="font-medium mb-2">拉取配置</div>
+          <div>
+            <label class="text-xs text-slate-500">Gmail 标签（可选）</label>
+            <input name="gmail_label" class="mt-1 w-full border rounded-lg px-3 py-2" value="{{ gmail.label or '' }}" placeholder="Support收件" />
+            <div class="text-xs text-slate-500 mt-1">留空表示不按标签过滤（不推荐）。</div>
+          </div>
+        </div>
+
+        <div class="border rounded-xl p-4">
+          <div class="font-medium mb-2">AI API（用于“拉取后解析：待处理/无需处理”）</div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label class="text-xs text-slate-500">Provider</label>
+              <input name="ai_provider" class="mt-1 w-full border rounded-lg px-3 py-2" value="{{ ai.provider or 'openai_compatible' }}" />
+            </div>
+            <div>
+              <label class="text-xs text-slate-500">Model</label>
+              <input name="ai_model" class="mt-1 w-full border rounded-lg px-3 py-2" value="{{ ai.model or '' }}" placeholder="gpt-4o-mini" />
+            </div>
+            <div>
+              <label class="text-xs text-slate-500">Base URL</label>
+              <input name="ai_base_url" class="mt-1 w-full border rounded-lg px-3 py-2" value="{{ ai.base_url or '' }}" placeholder="https://api.openai.com/v1" />
+            </div>
+            <div>
+              <label class="text-xs text-slate-500">API Key</label>
+              <input name="ai_api_key" type="password" class="mt-1 w-full border rounded-lg px-3 py-2" value="{{ ai.api_key or '' }}" />
+            </div>
+          </div>
+          <div class="mt-3">
+            <label class="text-xs text-slate-500">Prompt（用于输出“待处理/无需处理”的 JSON）</label>
+            <textarea name="prompt" class="mt-1 w-full border rounded-lg px-3 py-2 h-40 font-mono text-xs">{{ prompt or '' }}</textarea>
+            <div class="text-xs text-slate-500 mt-1">要求模型输出 JSON：result/confidence/reason/signals（字段不可缺失）。</div>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <a
+            href="#"
+            class="px-3 py-2 rounded-lg bg-slate-900 text-white hover:bg-slate-800 text-sm"
+            hx-get="/partials/fetch_modal"
+            hx-target="body"
+            hx-swap="beforeend"
+          >手动拉取并解析</a>
+          <button class="px-3 py-2 rounded-lg bg-white border hover:bg-slate-50 text-sm" type="submit" {% if read_only %}disabled class="opacity-50"{% endif %}>保存配置</button>
+          <a href="/emails" class="px-3 py-2 rounded-lg bg-white border hover:bg-slate-50 text-sm">进入列表</a>
+        </div>
+      </form>
+    </div>
+  </div>
+{% endblock %}
+

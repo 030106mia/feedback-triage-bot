@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="max-w-3xl mx-auto">
+    <div class="bg-white border rounded-2xl overflow-hidden">
+      <div class="px-6 py-6 border-b">
+        <div class="text-xl font-semibold">开始使用</div>
+        <div class="text-sm text-slate-600 mt-2">
+          尚未拉取任何邮件。点击下方按钮开始从 Gmail 拉取并用 AI 分流为「待处理 / 无需处理」。
+        </div>
+      </div>
+
+      <div class="p-6 space-y-4">
+        <div class="flex items-center gap-2">
+          <a
+            href="#"
+            class="px-4 py-3 rounded-xl bg-slate-900 text-white hover:bg-slate-800"
+            hx-get="/partials/fetch_modal"
+            hx-target="body"
+            hx-swap="beforeend"
+          >手动拉取并解析</a>
+          <a href="/emails" class="px-4 py-3 rounded-xl bg-white border hover:bg-slate-50">进入邮件列表</a>
+        </div>
+
+        <div class="text-xs text-slate-500">
+          提示：如果还未配置 AI Key / Prompt，请先到 <a class="underline" href="/settings">设置</a> 完成配置。
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}
+

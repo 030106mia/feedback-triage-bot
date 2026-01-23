@@ -1,0 +1,10 @@
+{% if status == "jira" %}
+  <span class="inline-flex items-center px-2 py-1 rounded-md bg-emerald-100 text-emerald-800">Jira</span>
+{% elif status == "skip" %}
+  <span class="inline-flex items-center px-2 py-1 rounded-md bg-slate-100 text-slate-700">跳过</span>
+{% elif status == "done" %}
+  <span class="inline-flex items-center px-2 py-1 rounded-md bg-indigo-100 text-indigo-800">已处理</span>
+{% else %}
+  <span class="inline-flex items-center px-2 py-1 rounded-md bg-amber-100 text-amber-800">待处理</span>
+{% endif %}
+

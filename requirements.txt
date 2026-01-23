@@ -1,0 +1,16 @@
+fastapi
+uvicorn[standard]
+jinja2
+python-multipart
+
+# Existing Gmail fetch scripts
+google-api-python-client
+google-auth
+google-auth-oauthlib
+
+# Jira integration
+requests
+
+# Sessions (login gate)
+itsdangerous
+

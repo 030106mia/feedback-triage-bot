@@ -1,0 +1,29 @@
+{# Row-style list item (no table) #}
+<div id="email-{{ e.email_id }}" class="group flex items-center gap-3 px-4 py-3 hover:bg-slate-50">
+  <div class="w-[7.5rem] shrink-0">
+    {% if e.processing_status == "pending" %}
+      <span class="inline-flex items-center px-2 py-1 rounded-md bg-amber-100 text-amber-800">待处理</span>
+    {% elif e.processing_status == "ignore" %}
+      <span class="inline-flex items-center px-2 py-1 rounded-md bg-slate-100 text-slate-700">无需处理</span>
+    {% else %}
+      <span class="inline-flex items-center px-2 py-1 rounded-md bg-emerald-100 text-emerald-800">已处理</span>
+    {% endif %}
+  </div>
+
+  <div class="min-w-0 flex-1">
+    <div class="truncate font-medium text-slate-900" title="{{ e.subject }}">{{ e.subject }}</div>
+    <div class="mt-0.5 flex items-center gap-2 text-xs text-slate-600">
+      <span class="truncate" title="{{ e.from_email }}">{{ e.from_name }}</span>
+      <span class="text-slate-300">•</span>
+      <span class="shrink-0">{{ e.date_display or "-" }}</span>
+    </div>
+  </div>
+
+  <div class="shrink-0 flex items-center gap-2">
+    <a href="/email/{{ e.email_id }}" class="px-3 py-2 rounded-lg bg-white border hover:bg-slate-50 text-sm">查看</a>
+    {% if e.processing_status == "pending" %}
+      <a href="/process/{{ e.email_id }}" class="px-3 py-2 rounded-lg bg-slate-900 text-white hover:bg-slate-800 text-sm">处理</a>
+    {% endif %}
+  </div>
+</div>
+

@@ -1,3 +1,14 @@
 # Gmail OAuth secrets
 secrets/
 
+# Local venv / python caches
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+.env
+.env.*
+
+# Local outputs
+out/
+

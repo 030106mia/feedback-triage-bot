@@ -1,0 +1,24 @@
+<div
+  class="space-y-2"
+  {% if not job.finished %}
+    hx-get="/api/fetch_parse/status/{{ job.job_id }}"
+    hx-trigger="every 1s"
+    hx-swap="outerHTML"
+  {% endif %}
+>
+  <div class="text-sm text-slate-700">
+    拉取并解析：{{ job.done }} / {{ job.total if job.total else "?" }}
+    {% if job.finished %}
+      <span class="ml-2 inline-flex items-center px-2 py-1 rounded-md bg-emerald-100 text-emerald-800">完成</span>
+    {% else %}
+      <span class="ml-2 inline-flex items-center px-2 py-1 rounded-md bg-amber-100 text-amber-800">进行中</span>
+    {% endif %}
+  </div>
+  {% if job.error %}
+    <div class="text-sm text-rose-800 bg-rose-50 border border-rose-200 rounded-lg p-2">{{ job.error }}</div>
+  {% endif %}
+  {% if job.finished and not job.error %}
+    <div class="text-sm text-slate-600">已更新状态。建议刷新列表或切换筛选查看。</div>
+  {% endif %}
+</div>
+

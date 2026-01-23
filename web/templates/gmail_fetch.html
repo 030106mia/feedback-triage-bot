@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="bg-white border rounded-xl overflow-hidden">
+    <div class="px-4 py-3 border-b">
+      <div class="font-medium">手动拉取 Gmail（落盘到 out/emails）</div>
+      <div class="text-sm text-slate-600">默认只拉取指定标签下的收件，并排除你发出的邮件（-from:me -in:sent）。</div>
+    </div>
+
+    <div class="p-4 space-y-4">
+      {% if not token_exists %}
+        <div class="p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-900">
+          未找到 `secrets/gmail_token.json`。请先运行 `python authorize_gmail.py` 完成授权。
+        </div>
+      {% endif %}
+
+      <form
+        class="grid grid-cols-1 md:grid-cols-4 gap-3 items-end"
+        hx-post="{{ request.url_for('api_gmail_fetch_start') }}"
+        hx-target="#fetch-status"
+        hx-swap="innerHTML"
+      >
+        <div class="md:col-span-2">
+          <label class="text-xs text-slate-500">Gmail 标签名</label>
+          <input name="label" class="mt-1 w-full border rounded-lg px-3 py-2" value="{{ label }}" />
+        </div>
+        <div>
+          <label class="text-xs text-slate-500">最多拉取（留空=全量）</label>
+          <input name="max_results" class="mt-1 w-full border rounded-lg px-3 py-2" placeholder="例如 200" />
+        </div>
+        <div class="flex items-center gap-3">
+          <label class="inline-flex items-center gap-2 text-sm text-slate-700">
+            <input type="checkbox" name="include_from_me" class="rounded border" />
+            包含我发出的
+          </label>
+          <button class="px-3 py-2 rounded-lg bg-slate-900 text-white hover:bg-slate-800" type="submit">
+            开始拉取
+          </button>
+        </div>
+      </form>
+
+      <div id="fetch-status" class="space-y-3">
+        <div class="text-slate-600">点击“开始拉取”。完成后回到首页即可看到新增邮件。</div>
+      </div>
+    </div>
+  </div>
+{% endblock %}
+

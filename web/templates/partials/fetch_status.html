@@ -1,0 +1,50 @@
+<div
+  class="space-y-3"
+  {% if not job.finished %}
+    hx-get="{{ request.url_for('api_gmail_fetch_status', job_id=job.job_id) }}"
+    hx-trigger="every 1s"
+    hx-swap="outerHTML"
+  {% endif %}
+>
+  <div class="flex items-center justify-between gap-3">
+    <div class="text-sm">
+      <span class="font-medium">Fetch Job</span>
+      <span class="font-mono text-xs">{{ job.job_id }}</span>
+    </div>
+    <div class="text-sm text-slate-700">
+      {% if job.total > 0 %}
+        进度：<span class="font-medium">{{ job.done }}</span> / {{ job.total }}
+      {% else %}
+        正在准备列表…
+      {% endif %}
+      {% if job.finished %}
+        <span class="ml-2 inline-flex items-center px-2 py-1 rounded-md bg-emerald-100 text-emerald-800">完成</span>
+      {% else %}
+        <span class="ml-2 inline-flex items-center px-2 py-1 rounded-md bg-amber-100 text-amber-800">进行中</span>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="text-sm text-slate-700">
+    标签：<span class="font-medium">{{ job.label }}</span>
+    {% if job.max_results %}
+      ，最多：{{ job.max_results }}
+    {% else %}
+      ，全量
+    {% endif %}
+    ，{% if job.include_from_me %}包含我发出的{% else %}排除我发出的{% endif %}
+  </div>
+
+  {% if job.error %}
+    <div class="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-800">
+      失败：{{ job.error }}
+    </div>
+  {% endif %}
+
+  {% if job.finished and not job.error %}
+    <div class="p-3 rounded-lg bg-slate-50 border text-slate-800">
+      已完成拉取。回到 <a class="text-sky-700 underline" href="{{ request.url_for('home') }}">首页</a> 查看邮件列表。
+    </div>
+  {% endif %}
+</div>
+

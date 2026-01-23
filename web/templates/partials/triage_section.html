@@ -1,0 +1,79 @@
+<div id="triage-section" class="p-4 space-y-4">
+  {% if error %}
+    <div class="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-800">
+      运行失败：{{ error }}
+    </div>
+  {% endif %}
+
+  {% if not triage %}
+    <div class="text-slate-600">
+      还没有 triage 结果（或读取失败）。点击右上角 <b>Run Triage</b> 生成 `out/triage/{{ email_id }}.triage.json`。
+    </div>
+  {% else %}
+    <form
+      class="space-y-3"
+      hx-post="{{ request.url_for('api_triage_save', email_id=email_id) }}"
+      hx-target="#triage-section"
+      hx-swap="outerHTML"
+    >
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div>
+          <label class="text-xs text-slate-500">classification</label>
+          <input
+            name="classification"
+            class="mt-1 w-full border rounded-lg px-3 py-2"
+            value="{{ triage.classification or '' }}"
+          />
+        </div>
+        <div>
+          <label class="text-xs text-slate-500">priority</label>
+          <input
+            name="priority"
+            class="mt-1 w-full border rounded-lg px-3 py-2"
+            value="{{ triage.priority or '' }}"
+          />
+        </div>
+      </div>
+
+      <div>
+        <label class="text-xs text-slate-500">jira.summary</label>
+        <input
+          name="jira_summary"
+          class="mt-1 w-full border rounded-lg px-3 py-2"
+          value="{{ triage.jira.summary if triage.jira else '' }}"
+        />
+      </div>
+
+      <div>
+        <label class="text-xs text-slate-500">jira.labels（逗号或换行分隔）</label>
+        <textarea
+          name="jira_labels"
+          class="mt-1 w-full border rounded-lg px-3 py-2 h-24"
+        >{% if triage.jira and triage.jira.labels %}{{ triage.jira.labels | join(", ") }}{% endif %}</textarea>
+      </div>
+
+      <div>
+        <label class="text-xs text-slate-500">jira.description</label>
+        <textarea
+          name="jira_description"
+          class="mt-1 w-full border rounded-lg px-3 py-2 h-64 font-mono text-xs"
+        >{{ triage.jira.description if triage.jira else '' }}</textarea>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <button class="px-3 py-2 rounded-lg bg-slate-900 text-white hover:bg-slate-800" type="submit">
+          Save
+        </button>
+        <div class="text-xs text-slate-500">
+          保存到：out/triage/{{ email_id }}.triage.json
+        </div>
+      </div>
+    </form>
+
+    <details class="border rounded-lg bg-slate-50 p-3">
+      <summary class="cursor-pointer text-sm text-slate-700">查看原始 JSON</summary>
+      <pre class="mt-2 text-xs overflow-auto whitespace-pre-wrap">{{ triage | tojson(indent=2, ensure_ascii=False) }}</pre>
+    </details>
+  {% endif %}
+</div>
+

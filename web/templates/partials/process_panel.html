@@ -1,0 +1,123 @@
+<div id="process-panel" class="bg-white border rounded-xl overflow-hidden">
+  <div class="px-4 py-3 border-b flex items-center justify-between">
+    <div class="font-medium">处理</div>
+    <div>
+      {% if processing_status == "processed" %}
+        <span class="inline-flex items-center px-2 py-1 rounded-md bg-emerald-100 text-emerald-800">已处理</span>
+      {% elif processing_status == "ignore" %}
+        <span class="inline-flex items-center px-2 py-1 rounded-md bg-slate-100 text-slate-700">无需处理</span>
+      {% else %}
+        <span class="inline-flex items-center px-2 py-1 rounded-md bg-amber-100 text-amber-800">待处理</span>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="p-4 space-y-4">
+    {% if read_only %}
+      <div class="p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-sm">
+        当前是只读模式：不能写入状态/创建 Jira。请本地运行以完成处理。
+      </div>
+    {% endif %}
+
+    {% if error %}
+      <div class="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-900 text-sm whitespace-pre-wrap break-words">{{ error }}</div>
+    {% endif %}
+
+    {% if state.ai %}
+      <div class="border rounded-xl p-3 bg-slate-50">
+        <div class="text-sm font-medium">AI 解析</div>
+        <div class="text-sm text-slate-700 mt-1">
+          decision：<span class="font-mono">{{ state.ai.decision }}</span>
+        </div>
+        <div class="text-sm text-slate-700 mt-1 whitespace-pre-wrap break-words">{{ state.ai.reason or "" }}</div>
+        {% if state.ai.raw %}
+          <div class="mt-2 text-xs text-slate-600">
+            confidence：<span class="font-mono">{{ state.ai.raw.confidence or "" }}</span>
+          </div>
+          {% if state.ai.raw.signals %}
+            <div class="mt-1 text-xs text-slate-600">
+              signals：
+              <ul class="list-disc pl-5">
+                {% for s in state.ai.raw.signals %}
+                  <li class="break-words">{{ s }}</li>
+                {% endfor %}
+              </ul>
+            </div>
+          {% endif %}
+        {% endif %}
+      </div>
+    {% else %}
+      <div class="text-slate-600">暂无 AI 解析结果（请在“邮件”页点击“手动拉取并解析”）。</div>
+    {% endif %}
+
+    {% if state.jira and state.jira.url %}
+      <div class="border rounded-xl p-3 bg-emerald-50 border-emerald-200">
+        <div class="text-sm font-medium text-emerald-900">已创建 Jira</div>
+        <div class="text-sm text-emerald-900 mt-1">
+          <a class="underline" href="{{ state.jira.url }}" target="_blank" rel="noreferrer">{{ state.jira.key or state.jira.url }}</a>
+        </div>
+        <div class="text-xs text-emerald-800 mt-1">created_at：<span class="font-mono">{{ state.jira.created_at or "" }}</span></div>
+      </div>
+    {% endif %}
+
+    {% if processing_status == "pending" and not (state.jira and state.jira.url) %}
+      <div class="border rounded-xl p-3">
+        <div class="text-sm font-medium">推进到 Jira</div>
+        <form
+          class="mt-3 space-y-3"
+          hx-post="/api/process/jira/{{ email_id }}"
+          hx-target="#process-panel"
+          hx-swap="outerHTML"
+        >
+          <div>
+            <label class="block text-xs text-slate-600 mb-1">Issue Type</label>
+            <select name="issue_type_name" class="w-full px-3 py-2 rounded-lg border bg-white">
+              {% for opt in jira_issue_types %}
+                <option value="{{ opt }}" {% if jira_defaults.issue_type_name == opt %}selected{% endif %}>{{ opt }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs text-slate-600 mb-1">Summary</label>
+            <input name="summary" class="w-full px-3 py-2 rounded-lg border" value="{{ jira_defaults.summary }}" />
+          </div>
+          <div>
+            <label class="block text-xs text-slate-600 mb-1">Description</label>
+            <textarea name="description" class="w-full px-3 py-2 rounded-lg border min-h-[180px] whitespace-pre-wrap">{{ jira_defaults.description }}</textarea>
+          </div>
+          <div>
+            <label class="block text-xs text-slate-600 mb-1">Labels（逗号分隔）</label>
+            <input name="labels" class="w-full px-3 py-2 rounded-lg border" value="{{ jira_defaults.labels }}" />
+          </div>
+          <button class="w-full px-3 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-50" type="submit" {% if read_only %}disabled{% endif %}>
+            创建 Jira 并标记已处理
+          </button>
+        </form>
+        <div class="text-xs text-slate-500 mt-2">
+          成功创建后会把此邮件标记为“已处理”，并保存 Jira 链接到状态文件。
+        </div>
+      </div>
+    {% endif %}
+
+    <div class="flex flex-wrap items-center gap-2">
+      <form hx-post="/api/process/mark/{{ email_id }}" hx-target="#process-panel" hx-swap="outerHTML">
+        <input type="hidden" name="mark" value="processed" />
+        <button class="px-3 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-50" type="submit" {% if read_only %}disabled{% endif %}>
+          标记已处理
+        </button>
+      </form>
+      <form hx-post="/api/process/mark/{{ email_id }}" hx-target="#process-panel" hx-swap="outerHTML">
+        <input type="hidden" name="mark" value="ignore" />
+        <button class="px-3 py-2 rounded-lg bg-slate-700 text-white hover:bg-slate-600 disabled:opacity-50" type="submit" {% if read_only %}disabled{% endif %}>
+          标记无需处理
+        </button>
+      </form>
+      <a class="px-3 py-2 rounded-lg bg-white border hover:bg-slate-50" href="/emails">返回列表</a>
+    </div>
+
+    <div class="text-xs text-slate-500">
+      状态文件：out/triage_state/{{ email_id }}.state.json
+    </div>
+  </div>
+</div>
+

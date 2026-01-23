@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="bg-white border rounded-xl overflow-hidden">
+    <div class="px-4 py-3 border-b">
+      <div class="font-medium">设置</div>
+      <div class="text-sm text-slate-600">
+        配置会保存到 <span class="font-mono text-xs">{{ settings_path }}</span>（本地文件，已被 git 忽略）。
+      </div>
+    </div>
+
+    <div class="p-4 space-y-4">
+      {% if read_only %}
+        <div class="p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-900">
+          当前处于<strong>只读模式</strong>（例如 Vercel Serverless）。本页不保存到文件。
+          请在部署平台配置环境变量，或改为本地运行后保存到 <span class="font-mono text-xs">{{ settings_path }}</span>。
+        </div>
+      {% endif %}
+      {% if saved %}
+        <div class="p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-900">{{ saved }}</div>
+      {% endif %}
+      {% if error %}
+        <div class="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-800">{{ error }}</div>
+      {% endif %}
+
+      <form hx-post="/api/settings/save" hx-swap="outerHTML" class="space-y-6">
+        <div class="border rounded-xl p-4">
+          <div class="font-medium mb-2">Gmail</div>
+          <div>
+            <label class="text-xs text-slate-500">默认标签（可选）</label>
+            <input name="gmail_label" class="mt-1 w-full border rounded-lg px-3 py-2" value="{{ gmail.label or '' }}" placeholder="Support收件" />
+          </div>
+        </div>
+
+        <div class="border rounded-xl p-4">
+          <div class="font-medium mb-2">Jira</div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label class="text-xs text-slate-500">JIRA_BASE_URL</label>
+              <input name="jira_base_url" class="mt-1 w-full border rounded-lg px-3 py-2" value="{{ jira.base_url or '' }}" placeholder="https://xxx.atlassian.net" />
+            </div>
+            <div>
+              <label class="text-xs text-slate-500">JIRA_PROJECT_KEY</label>
+              <input name="jira_project_key" class="mt-1 w-full border rounded-lg px-3 py-2" value="{{ jira.project_key or '' }}" placeholder="FILO" />
+            </div>
+            <div>
+              <label class="text-xs text-slate-500">JIRA_EMAIL</label>
+              <input name="jira_email" class="mt-1 w-full border rounded-lg px-3 py-2" value="{{ jira.email or '' }}" />
+            </div>
+            <div>
+              <label class="text-xs text-slate-500">JIRA_API_TOKEN</label>
+              <input name="jira_api_token" type="password" class="mt-1 w-full border rounded-lg px-3 py-2" value="{{ jira.api_token or '' }}" />
+              <div class="text-xs text-slate-500 mt-1">本地保存；不要提交到 git，也不要发到聊天里。</div>
+            </div>
+            <div>
+              <label class="text-xs text-slate-500">JIRA_ISSUE_TYPE_BUG</label>
+              <input name="jira_issue_type_bug" class="mt-1 w-full border rounded-lg px-3 py-2" value="{{ jira.issue_type_bug or '缺陷' }}" />
+            </div>
+            <div>
+              <label class="text-xs text-slate-500">JIRA_ISSUE_TYPE_TASK</label>
+              <input name="jira_issue_type_task" class="mt-1 w-full border rounded-lg px-3 py-2" value="{{ jira.issue_type_task or '任务' }}" />
+            </div>
+          </div>
+        </div>
+
+        <div class="border rounded-xl p-4">
+          <div class="font-medium mb-2">AI API（预留）</div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label class="text-xs text-slate-500">Provider</label>
+              <input name="ai_provider" class="mt-1 w-full border rounded-lg px-3 py-2" value="{{ ai.provider or '' }}" placeholder="openai / azure / custom" />
+            </div>
+            <div>
+              <label class="text-xs text-slate-500">Model</label>
+              <input name="ai_model" class="mt-1 w-full border rounded-lg px-3 py-2" value="{{ ai.model or '' }}" placeholder="gpt-4.1-mini / ..." />
+            </div>
+            <div>
+              <label class="text-xs text-slate-500">Base URL</label>
+              <input name="ai_base_url" class="mt-1 w-full border rounded-lg px-3 py-2" value="{{ ai.base_url or '' }}" placeholder="https://api.openai.com/v1" />
+            </div>
+            <div>
+              <label class="text-xs text-slate-500">API Key</label>
+              <input name="ai_api_key" type="password" class="mt-1 w-full border rounded-lg px-3 py-2" value="{{ ai.api_key or '' }}" />
+            </div>
+          </div>
+          <div class="mt-3">
+            <label class="text-xs text-slate-500">Prompt（输出 JSON：decision/reason）</label>
+            <textarea name="prompt" class="mt-1 w-full border rounded-lg px-3 py-2 h-40 font-mono text-xs">{{ prompt or '' }}</textarea>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <button class="px-3 py-2 rounded-lg bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed" type="submit" {% if read_only %}disabled{% endif %}>保存设置</button>
+          <a href="/work?scope=candidate" class="px-3 py-2 rounded-lg bg-white border hover:bg-slate-50">返回快速处理</a>
+        </div>
+      </form>
+
+      <form action="/auth/gmail/logout" method="post">
+        <button class="px-3 py-2 rounded-lg bg-white border hover:bg-slate-50" type="submit">退出 Gmail 登录</button>
+      </form>
+    </div>
+  </div>
+{% endblock %}
+
