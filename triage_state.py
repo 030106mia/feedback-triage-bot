@@ -167,3 +167,26 @@ def upsert_ai_result(
         existing["status"] = "pending"
     return save_state(email_id, existing, state_dir=state_dir)
 
+
+def upsert_jira_draft(
+    email_id: str,
+    *,
+    issue_type_name: str,
+    summary: str,
+    description: str,
+    labels: list[str],
+    state_dir: str = DEFAULT_TRIAGE_STATE_DIR,
+) -> Dict[str, Any]:
+    """
+    保存 Jira 工单草稿（用于“生成工单”后可编辑再一键导入）。
+    """
+    existing = load_state(email_id, state_dir=state_dir) or {}
+    existing["jira_draft"] = {
+        "issue_type_name": issue_type_name,
+        "summary": summary,
+        "description": description,
+        "labels": labels,
+        "generated_at": _utc_now(),
+    }
+    return save_state(email_id, existing, state_dir=state_dir)
+

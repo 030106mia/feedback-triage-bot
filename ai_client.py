@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Tuple
 
@@ -18,6 +19,19 @@ class AiConfig:
     api_key: str
     model: str
     prompt: str
+
+
+def _redact_secrets(text: str) -> str:
+    """
+    最小化泄露风险：把常见的 API key 片段打码（例如 OpenAI sk-...）。
+    """
+    if not text:
+        return ""
+    # openai keys: sk-...
+    text = re.sub(r"\bsk-[A-Za-z0-9]{8,}\b", "sk-***", text)
+    # bearer token style
+    text = re.sub(r"(Bearer\s+)[A-Za-z0-9\-_\.]{8,}", r"\1***", text, flags=re.IGNORECASE)
+    return text
 
 
 def ai_config_from_settings(settings: Dict[str, Any]) -> AiConfig:
@@ -96,12 +110,12 @@ def analyze_email_openai_compatible(cfg: AiConfig, email: Dict[str, Any]) -> Dic
 
     resp = requests.post(url, headers=headers, json=payload, timeout=60)
     if resp.status_code >= 400:
-        raise AiError(f"AI request failed ({resp.status_code}): {resp.text[:500]}")
+        raise AiError(f"AI request failed ({resp.status_code}): {_redact_secrets(resp.text)[:500]}")
     data = resp.json()
     try:
         content = data["choices"][0]["message"]["content"]
     except Exception:
-        raise AiError(f"Unexpected AI response: {json.dumps(data)[:500]}")
+        raise AiError(f"Unexpected AI response: {_redact_secrets(json.dumps(data, ensure_ascii=False))[:500]}")
     out = _extract_json_from_text(content)
     return out
 
@@ -110,4 +124,79 @@ def analyze_email(cfg: AiConfig, email: Dict[str, Any]) -> Dict[str, Any]:
     if cfg.provider == "openai_compatible":
         return analyze_email_openai_compatible(cfg, email)
     raise AiError(f"Unsupported provider: {cfg.provider}")
+
+
+def generate_jira_draft_openai_compatible(
+    cfg: AiConfig,
+    *,
+    email: Dict[str, Any],
+    issue_type_name: str,
+    ai_context: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """
+    期望模型返回 JSON：
+      {
+        "summary": "...",
+        "description": "...",
+        "labels": ["a", "b"]
+      }
+    """
+    url = f"{cfg.base_url}/chat/completions"
+    headers = {"Authorization": f"Bearer {cfg.api_key}", "Content-Type": "application/json"}
+
+    variables = {
+        "issue_type_name": issue_type_name,
+        "subject": email.get("subject", ""),
+        "from": email.get("from", ""),
+        "date": email.get("date", ""),
+        "body_text": email.get("body_text", ""),
+        "ai": ai_context or {},
+    }
+
+    system = (
+        "你是一个 Jira 工单撰写助手。你必须只输出 JSON（不要输出任何额外文本）。"
+        "JSON 必须包含 summary, description, labels 三个字段。"
+        "summary 简洁明确；description 用多行文本，包含问题/背景/复现(如有)/期望/建议处理；"
+        "labels 为 0~6 个短标签（英文或拼音均可），不包含空格。"
+        "不要包含任何 snippet 字段（输入里也没有）。"
+    )
+    user = "基于以下输入生成 Jira 工单草稿：\n" + json.dumps(variables, ensure_ascii=False)
+
+    payload: Dict[str, Any] = {
+        "model": cfg.model,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ],
+        "temperature": 0.3,
+    }
+
+    resp = requests.post(url, headers=headers, json=payload, timeout=60)
+    if resp.status_code >= 400:
+        raise AiError(f"AI request failed ({resp.status_code}): {_redact_secrets(resp.text)[:500]}")
+    data = resp.json()
+    try:
+        content = data["choices"][0]["message"]["content"]
+    except Exception:
+        raise AiError(f"Unexpected AI response: {_redact_secrets(json.dumps(data, ensure_ascii=False))[:500]}")
+    out = _extract_json_from_text(content)
+
+    summary = str(out.get("summary") or "").strip()
+    description = str(out.get("description") or "").strip()
+    labels = out.get("labels")
+    if not isinstance(labels, list):
+        labels = []
+    labels2 = []
+    for x in labels:
+        s = str(x or "").strip()
+        if not s:
+            continue
+        if s not in labels2:
+            labels2.append(s)
+
+    if not summary:
+        summary = str(email.get("subject") or "").strip() or "(no subject)"
+
+    return {"summary": summary, "description": description, "labels": labels2}
+
 

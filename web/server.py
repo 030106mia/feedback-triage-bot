@@ -19,7 +19,7 @@ from starlette.responses import JSONResponse
 from starlette.middleware.sessions import SessionMiddleware
 
 from fetch_full import fetch_to_out
-from ai_client import AiError, ai_config_from_settings, analyze_email
+from ai_client import AiError, ai_config_from_settings, analyze_email, generate_jira_draft_openai_compatible, AiConfig
 from gmail_auth import (
     authorization_url,
     build_flow_for_web,
@@ -37,7 +37,7 @@ from jira_client import (
     load_jira_config_from_env,
 )
 from settings_store import DEFAULT_SETTINGS_PATH, load_settings, merge_settings
-from triage_state import DEFAULT_TRIAGE_STATE_DIR, load_state, mark_processed, processing_status, set_jira_link, set_status, upsert_ai_result
+from triage_state import DEFAULT_TRIAGE_STATE_DIR, load_state, mark_processed, processing_status, set_jira_link, set_status, upsert_ai_result, upsert_jira_draft
 from triage_core import (
     discover_input_files,
     load_json,
@@ -182,7 +182,6 @@ def _jira_defaults_for_email(email: Dict[str, Any], st: Dict[str, Any], issue_ty
     subject = _safe_str(email.get("subject") or "").strip() or "(no subject)"
     from_ = _safe_str(email.get("from") or "").strip()
     date = _safe_str(email.get("date") or "").strip()
-    snippet = _safe_str(email.get("snippet") or "").strip()
     body = _safe_str(email.get("body_text") or "").strip()
 
     ai = st.get("ai") if isinstance(st.get("ai"), dict) else {}
@@ -196,9 +195,6 @@ def _jira_defaults_for_email(email: Dict[str, Any], st: Dict[str, Any], issue_ty
         [
             f"From: {from_}" if from_ else "From: (unknown)",
             f"Date: {date}" if date else "Date: -",
-            "",
-            "Snippet:",
-            snippet or "",
             "",
             "Body:",
             body or "",
@@ -218,6 +214,42 @@ def _jira_defaults_for_email(email: Dict[str, Any], st: Dict[str, Any], issue_ty
         "description": description,
         "labels": "",
     }
+
+
+def _jira_draft_from_state(st: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    if not isinstance(st, dict):
+        return None
+    jd = st.get("jira_draft")
+    if not isinstance(jd, dict):
+        return None
+    # 兼容性/容错
+    issue_type_name = _safe_str(jd.get("issue_type_name") or "").strip()
+    summary = _safe_str(jd.get("summary") or "").strip()
+    description = _safe_str(jd.get("description") or "")
+    labels = jd.get("labels") if isinstance(jd.get("labels"), list) else []
+    labels_text = ", ".join([_safe_str(x) for x in labels if _safe_str(x)])
+    if not summary and not description and not labels_text:
+        return None
+    return {
+        "issue_type_name": issue_type_name,
+        "summary": summary,
+        "description": description,
+        "labels": labels_text,
+    }
+
+
+def _ai_cfg_for_jira(settings: Dict[str, Any]) -> AiConfig:
+    """
+    Jira 工单生成使用内置 prompt；不依赖用户在 settings 里填写的分类 prompt。
+    """
+    ai = settings.get("ai") if isinstance(settings.get("ai"), dict) else {}
+    provider = (ai.get("provider") or "").strip() or "openai_compatible"
+    base_url = (ai.get("base_url") or "").strip() or "https://api.openai.com/v1"
+    api_key = (ai.get("api_key") or "").strip()
+    model = (ai.get("model") or "").strip() or "gpt-4o-mini"
+    if not api_key:
+        raise AiError("Missing AI settings: AI api_key")
+    return AiConfig(provider=provider, base_url=base_url.rstrip("/"), api_key=api_key, model=model, prompt="(builtin)")
 
 
 def _triage_path(email_id: str) -> Path:
@@ -554,7 +586,8 @@ def process_email(request: Request, email_id: str) -> HTMLResponse:
     st = load_state(email_id, state_dir=str(TRIAGE_STATE_DIR)) or {}
     pstatus = processing_status(st)
     issue_types = _jira_issue_type_options()
-    jira_defaults = _jira_defaults_for_email(email, st, issue_types)
+    jira_defaults = _jira_draft_from_state(st) or _jira_defaults_for_email(email, st, issue_types)
+    jira_generated = _jira_draft_from_state(st) is not None
     return templates.TemplateResponse(
         "process_email.html",
         {
@@ -566,6 +599,7 @@ def process_email(request: Request, email_id: str) -> HTMLResponse:
             "read_only": READ_ONLY,
             "jira_issue_types": issue_types,
             "jira_defaults": jira_defaults,
+            "jira_generated": jira_generated,
             "error": None,
         },
     )
@@ -668,16 +702,22 @@ async def api_settings_save(
     prompt: str = Form(""),
 ) -> HTMLResponse:
     _require_gmail_login(request)
+    is_hx = request.headers.get("HX-Request") == "true"
     if READ_ONLY:
         settings = load_settings(path=str(OUT_DIR / "settings.json"))
+        gmail = settings.get("gmail") if isinstance(settings.get("gmail"), dict) else {}
         jira = settings.get("jira") if isinstance(settings.get("jira"), dict) else {}
         ai = settings.get("ai") if isinstance(settings.get("ai"), dict) else {}
+        prompt_cur = settings.get("prompt") or ""
+        tpl = "partials/settings_panel.html" if is_hx else "settings.html"
         return templates.TemplateResponse(
-            "settings.html",
+            tpl,
             {
                 "request": request,
+                "gmail": gmail,
                 "jira": jira,
                 "ai": ai,
+                "prompt": prompt_cur,
                 "saved": None,
                 "error": "当前处于只读模式（例如 Vercel Serverless）。请在 Vercel 项目里配置环境变量，或在本地运行以保存到 out/settings.json。",
                 "settings_path": str(OUT_DIR / "settings.json"),
@@ -713,8 +753,9 @@ async def api_settings_save(
         jira = settings.get("jira") if isinstance(settings.get("jira"), dict) else {}
         ai = settings.get("ai") if isinstance(settings.get("ai"), dict) else {}
         prompt_cur = settings.get("prompt") or ""
+        tpl = "partials/settings_panel.html" if is_hx else "settings.html"
         return templates.TemplateResponse(
-            "settings.html",
+            tpl,
             {
                 "request": request,
                 "gmail": gmail,
@@ -733,8 +774,9 @@ async def api_settings_save(
     jira = settings.get("jira") if isinstance(settings.get("jira"), dict) else {}
     ai = settings.get("ai") if isinstance(settings.get("ai"), dict) else {}
     prompt_cur = settings.get("prompt") or ""
+    tpl = "partials/settings_panel.html" if is_hx else "settings.html"
     return templates.TemplateResponse(
-        "settings.html",
+        tpl,
         {
             "request": request,
             "gmail": gmail,
@@ -882,7 +924,8 @@ async def api_process_mark(
     st = load_state(email_id, state_dir=str(TRIAGE_STATE_DIR)) or {}
     pstatus = processing_status(st)
     issue_types = _jira_issue_type_options()
-    jira_defaults = _jira_defaults_for_email(email, st, issue_types)
+    jira_defaults = _jira_draft_from_state(st) or _jira_defaults_for_email(email, st, issue_types)
+    jira_generated = _jira_draft_from_state(st) is not None
     if request.headers.get("HX-Request") != "true":
         return RedirectResponse(url=f"/process/{email_id}", status_code=302)
     return templates.TemplateResponse(
@@ -896,6 +939,7 @@ async def api_process_mark(
             "read_only": READ_ONLY,
             "jira_issue_types": issue_types,
             "jira_defaults": jira_defaults,
+            "jira_generated": jira_generated,
             "error": None,
         },
     )
@@ -919,6 +963,7 @@ async def api_process_jira(
     pstatus = processing_status(st)
     issue_types = _jira_issue_type_options()
     jira_defaults = _jira_defaults_for_email(email, st, issue_types)
+    jira_generated = _jira_draft_from_state(st) is not None
 
     # 仅允许对待处理推进 Jira（避免重复/误点）
     if pstatus != "pending":
@@ -935,6 +980,7 @@ async def api_process_jira(
                 "read_only": READ_ONLY,
                 "jira_issue_types": issue_types,
                 "jira_defaults": jira_defaults,
+                "jira_generated": jira_generated,
                 "error": "当前状态不是“待处理”，不允许创建 Jira。",
             },
         )
@@ -988,6 +1034,7 @@ async def api_process_jira(
                 "read_only": READ_ONLY,
                 "jira_issue_types": issue_types,
                 "jira_defaults": jira_defaults,
+                "jira_generated": jira_generated,
                 "error": f"创建 Jira 失败：{e}（请先在 /settings 配置 Jira）",
             },
         )
@@ -995,7 +1042,8 @@ async def api_process_jira(
     if request.headers.get("HX-Request") != "true":
         return RedirectResponse(url=f"/process/{email_id}", status_code=302)
     # 成功：刷新右侧面板，展示 Jira 链接 + 已处理状态
-    jira_defaults = _jira_defaults_for_email(email, st, issue_types)
+    jira_defaults = _jira_draft_from_state(st) or _jira_defaults_for_email(email, st, issue_types)
+    jira_generated = _jira_draft_from_state(st) is not None
     return templates.TemplateResponse(
         "partials/process_panel.html",
         {
@@ -1007,7 +1055,89 @@ async def api_process_jira(
             "read_only": READ_ONLY,
             "jira_issue_types": issue_types,
             "jira_defaults": jira_defaults,
+            "jira_generated": jira_generated,
             "error": None,
+        },
+    )
+
+
+@app.post("/api/process/jira_generate/{email_id}", response_class=HTMLResponse, name="api_process_jira_generate")
+async def api_process_jira_generate(
+    request: Request,
+    email_id: str,
+    issue_type_name: str = Form(""),
+) -> HTMLResponse:
+    """
+    生成 Jira 工单草稿（先选类型，再点“生成工单”）。
+    """
+    _require_gmail_login(request)
+    if READ_ONLY:
+        raise HTTPException(status_code=403, detail="只读模式下不允许生成工单草稿。请本地运行。")
+
+    email = load_email_by_id(email_id)
+    st = load_state(email_id, state_dir=str(TRIAGE_STATE_DIR)) or {}
+    pstatus = processing_status(st)
+    issue_types = _jira_issue_type_options()
+    issue_type_name = (issue_type_name or "").strip() or (issue_types[0] if issue_types else "Task")
+
+    warn: Optional[str] = None
+    try:
+        settings = load_settings(path=str(OUT_DIR / "settings.json"))
+        ai_ctx = st.get("ai") if isinstance(st.get("ai"), dict) else None
+        cfg = _ai_cfg_for_jira(settings)
+        draft = generate_jira_draft_openai_compatible(cfg, email=email, issue_type_name=issue_type_name, ai_context=ai_ctx)
+        labels_list = draft.get("labels") if isinstance(draft.get("labels"), list) else []
+    except Exception as e:
+        # AI 失败时：fallback 用模板生成，保证流程可走通
+        ai = st.get("ai") if isinstance(st.get("ai"), dict) else {}
+        ai_reason = _safe_str(ai.get("reason") or "")
+        desc = "\n".join(
+            [
+                f"From: {_safe_str(email.get('from') or '') or '(unknown)'}",
+                f"Date: {_safe_str(email.get('date') or '') or '-'}",
+                "",
+                "Body:",
+                _safe_str(email.get("body_text") or ""),
+                "",
+                "AI:",
+                f"decision: {_safe_str(ai.get('decision') or '-')}",
+                ai_reason,
+            ]
+        ).strip()
+        draft = {
+            "summary": _safe_str(email.get("subject") or "").strip() or "(no subject)",
+            "description": desc,
+            "labels": [],
+        }
+        labels_list = []
+        warn = f"AI 生成失败，已使用模板生成（可手动修改）：{e}"
+
+    await asyncio.to_thread(
+        upsert_jira_draft,
+        email_id,
+        issue_type_name=issue_type_name,
+        summary=str(draft.get("summary") or ""),
+        description=str(draft.get("description") or ""),
+        labels=labels_list,
+        state_dir=str(TRIAGE_STATE_DIR),
+    )
+    st = load_state(email_id, state_dir=str(TRIAGE_STATE_DIR)) or st
+
+    jira_defaults = _jira_draft_from_state(st) or _jira_defaults_for_email(email, st, issue_types)
+    jira_generated = _jira_draft_from_state(st) is not None
+    return templates.TemplateResponse(
+        "partials/process_panel.html",
+        {
+            "request": request,
+            "email_id": email_id,
+            "email": email,
+            "state": st,
+            "processing_status": pstatus,
+            "read_only": READ_ONLY,
+            "jira_issue_types": issue_types,
+            "jira_defaults": jira_defaults,
+            "jira_generated": jira_generated,
+            "error": warn,
         },
     )
 

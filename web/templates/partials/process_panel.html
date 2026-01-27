@@ -63,20 +63,38 @@
     {% if processing_status == "pending" and not (state.jira and state.jira.url) %}
       <div class="border rounded-xl p-3">
         <div class="text-sm font-medium">推进到 Jira</div>
+        {% if not jira_generated %}
+          <form
+            class="mt-3 space-y-3"
+            hx-post="/api/process/jira_generate/{{ email_id }}"
+            hx-target="#process-panel"
+            hx-swap="outerHTML"
+          >
+            <div>
+              <label class="block text-xs text-slate-600 mb-1">Issue Type</label>
+              <select name="issue_type_name" class="w-full px-3 py-2 rounded-lg border bg-white">
+                {% for opt in jira_issue_types %}
+                  <option value="{{ opt }}" {% if jira_defaults.issue_type_name == opt %}selected{% endif %}>{{ opt }}</option>
+                {% endfor %}
+              </select>
+              <div class="text-xs text-slate-500 mt-1">先选择类型，再点击“生成工单”。</div>
+            </div>
+
+            <button class="w-full px-3 py-2 rounded-lg bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-50" type="submit" {% if read_only %}disabled{% endif %}>
+              生成工单
+            </button>
+          </form>
+        {% else %}
+          <div class="mt-3 text-xs text-slate-500">已生成工单草稿（可在下方编辑后导入 Jira）。</div>
+        {% endif %}
+
         <form
           class="mt-3 space-y-3"
           hx-post="/api/process/jira/{{ email_id }}"
           hx-target="#process-panel"
           hx-swap="outerHTML"
         >
-          <div>
-            <label class="block text-xs text-slate-600 mb-1">Issue Type</label>
-            <select name="issue_type_name" class="w-full px-3 py-2 rounded-lg border bg-white">
-              {% for opt in jira_issue_types %}
-                <option value="{{ opt }}" {% if jira_defaults.issue_type_name == opt %}selected{% endif %}>{{ opt }}</option>
-              {% endfor %}
-            </select>
-          </div>
+          <input type="hidden" name="issue_type_name" value="{{ jira_defaults.issue_type_name }}" />
           <div>
             <label class="block text-xs text-slate-600 mb-1">Summary</label>
             <input name="summary" class="w-full px-3 py-2 rounded-lg border" value="{{ jira_defaults.summary }}" />
@@ -89,9 +107,12 @@
             <label class="block text-xs text-slate-600 mb-1">Labels（逗号分隔）</label>
             <input name="labels" class="w-full px-3 py-2 rounded-lg border" value="{{ jira_defaults.labels }}" />
           </div>
-          <button class="w-full px-3 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-50" type="submit" {% if read_only %}disabled{% endif %}>
-            创建 Jira 并标记已处理
+          <button class="w-full px-3 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-50" type="submit" {% if read_only or not jira_generated %}disabled{% endif %}>
+            一键导入 Jira（创建工单并标记已处理）
           </button>
+          {% if not jira_generated %}
+            <div class="text-xs text-amber-700">提示：请先点击上方“生成工单”，校验后再导入 Jira。</div>
+          {% endif %}
         </form>
         <div class="text-xs text-slate-500 mt-2">
           成功创建后会把此邮件标记为“已处理”，并保存 Jira 链接到状态文件。
