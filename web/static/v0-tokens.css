@@ -1,44 +1,207 @@
 :root {
-  /* v0 / shadcn-style design tokens (no-build subset) */
-  --background: oklch(0.09 0 0);
-  --foreground: oklch(0.95 0 0);
-  --card: oklch(0.12 0 0);
-  --card-foreground: oklch(0.95 0 0);
-  --popover: oklch(0.12 0 0);
-  --popover-foreground: oklch(0.95 0 0);
-  --primary: oklch(0.98 0 0);
-  --primary-foreground: oklch(0.09 0 0);
-  --secondary: oklch(0.18 0 0);
-  --secondary-foreground: oklch(0.95 0 0);
-  --muted: oklch(0.18 0 0);
-  --muted-foreground: oklch(0.6 0 0);
-  --accent: oklch(0.18 0 0);
-  --accent-foreground: oklch(0.95 0 0);
-  --destructive: oklch(0.55 0.2 25);
-  --destructive-foreground: oklch(0.98 0 0);
-  --border: oklch(0.22 0 0);
-  --input: oklch(0.18 0 0);
-  --ring: oklch(0.4 0 0);
-  --chart-1: oklch(0.65 0.15 250);
-  --chart-2: oklch(0.7 0.15 160);
-  --chart-3: oklch(0.6 0.15 30);
-  --chart-4: oklch(0.75 0.12 80);
-  --chart-5: oklch(0.65 0.18 320);
-  --radius: 0.5rem;
-  --sidebar: oklch(0.07 0 0);
-  --sidebar-foreground: oklch(0.95 0 0);
-  --sidebar-primary: oklch(0.98 0 0);
-  --sidebar-primary-foreground: oklch(0.09 0 0);
-  --sidebar-accent: oklch(0.15 0 0);
-  --sidebar-accent-foreground: oklch(0.95 0 0);
-  --sidebar-border: oklch(0.2 0 0);
-  --sidebar-ring: oklch(0.4 0 0);
-  --success: oklch(0.65 0.17 145);
-  --success-foreground: oklch(0.98 0 0);
-  --warning: oklch(0.75 0.15 80);
-  --warning-foreground: oklch(0.15 0 0);
+  /* UI tokens (light by default) */
+  --bg: #f8fafc; /* slate-50 */
+  --bg2: #ffffff;
+  --fg: #0f172a; /* slate-900 */
+  --muted: #475569; /* slate-600 */
+  --muted2: #64748b; /* slate-500 */
+  --border: rgba(15, 23, 42, 0.10);
+  --border2: rgba(15, 23, 42, 0.06);
+  --card: rgba(255, 255, 255, 0.92);
+  /* Prefer Open Props tokens when available, fallback to local values */
+  --shadow: var(--shadow-5, 0 18px 48px rgba(15, 23, 42, 0.10));
+  --shadow-sm: var(--shadow-3, 0 10px 28px rgba(15, 23, 42, 0.08));
+  --shadow-xs: var(--shadow-2, 0 6px 18px rgba(15, 23, 42, 0.06));
+  --radius: var(--radius-4, 18px);
+  --radius-sm: var(--radius-3, 14px);
+
+  --primary: #0f172a; /* slate-900 */
+  --primary-fg: #ffffff;
+  --secondary: rgba(15, 23, 42, 0.06);
+  --secondary-fg: #0f172a;
+  --focus: rgba(59, 130, 246, 0.5); /* blue-500 */
+  --danger: #e11d48; /* rose-600 */
 }
 
-/* Optional: if you later want to apply token-driven theme, do it explicitly:
-   body { background: var(--background); color: var(--foreground); }
-*/
+/* Page baseline */
+html,
+body {
+  height: 100%;
+}
+
+body {
+  color: var(--fg);
+  background: radial-gradient(1200px 500px at 20% -10%, rgba(59, 130, 246, 0.10), transparent 55%),
+    radial-gradient(900px 500px at 80% 0%, rgba(14, 165, 233, 0.08), transparent 60%),
+    linear-gradient(180deg, var(--bg), var(--bg2) 40%, var(--bg));
+}
+
+/* Small component system (works with tailwind utilities) */
+.ui-card {
+  background: var(--card);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-xs);
+  overflow: hidden;
+}
+
+.ui-card-hd {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0.75));
+  backdrop-filter: blur(10px);
+}
+
+.ui-card-item {
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-xs);
+  transition: transform 140ms var(--ease-3, ease), box-shadow 140ms var(--ease-3, ease), background 140ms var(--ease-3, ease);
+}
+
+.ui-card-item:hover {
+  background: rgba(255, 255, 255, 0.98);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.ui-topbar {
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid var(--border2);
+  border-radius: 9999px;
+  box-shadow: var(--shadow-sm);
+  backdrop-filter: blur(10px);
+}
+
+.ui-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0.95rem;
+  border-radius: 9999px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  transition: transform 120ms ease, background 120ms ease, box-shadow 120ms ease;
+  user-select: none;
+}
+
+.ui-btn:active {
+  transform: translateY(1px);
+}
+
+.ui-btn-primary {
+  background: var(--primary);
+  color: var(--primary-fg);
+  border-color: rgba(15, 23, 42, 0.35);
+}
+
+.ui-btn-primary:hover {
+  box-shadow: var(--shadow-sm);
+}
+
+.ui-btn-accent {
+  /* soft blue primary action */
+  background: #bae6fd; /* sky-200 */
+  color: #0c4a6e; /* sky-900 */
+  border-color: rgba(14, 165, 233, 0.45); /* sky-500 */
+  box-shadow: 0 14px 30px rgba(2, 132, 199, 0.16); /* sky-600 */
+}
+
+.ui-btn-accent:hover {
+  background: #7dd3fc; /* sky-300 */
+  box-shadow: 0 18px 40px rgba(2, 132, 199, 0.22);
+}
+
+.ui-btn-lg {
+  padding: 0.75rem 1.1rem;
+  border-radius: 9999px;
+}
+
+.ui-btn-secondary {
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--fg);
+}
+
+.ui-btn-secondary:hover {
+  background: rgba(255, 255, 255, 1);
+}
+
+.ui-btn-ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--muted);
+}
+
+.ui-btn-ghost:hover {
+  background: rgba(15, 23, 42, 0.05);
+  color: var(--fg);
+}
+
+.ui-input,
+.ui-select,
+.ui-textarea {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.85);
+  padding: 0.65rem 0.85rem;
+  outline: none;
+  transition: box-shadow 120ms ease, border-color 120ms ease, background 120ms ease;
+}
+
+.ui-input:focus,
+.ui-select:focus,
+.ui-textarea:focus {
+  box-shadow: 0 0 0 4px var(--focus);
+  border-color: rgba(59, 130, 246, 0.7);
+  background: rgba(255, 255, 255, 1);
+}
+
+.ui-kbd {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+/* Utility: multi-line truncate (no tailwind plugin needed) */
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+.ui-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.6rem;
+  border-radius: 9999px;
+  font-size: 12px;
+  line-height: 1;
+  border: 1px solid var(--border2);
+  background: rgba(255, 255, 255, 0.75);
+}
+
+.ui-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.55rem 0.9rem;
+  border-radius: 9999px;
+  border: 1px solid var(--border2);
+  background: rgba(255, 255, 255, 0.75);
+  color: var(--muted);
+  font-weight: 600;
+  transition: background 120ms ease, box-shadow 120ms ease, color 120ms ease;
+}
+
+.ui-tab:hover {
+  background: rgba(255, 255, 255, 0.95);
+  color: var(--fg);
+}
+
+.ui-tab-active {
+  background: rgba(255, 255, 255, 1);
+  color: var(--fg);
+  box-shadow: var(--shadow-xs);
+}
+

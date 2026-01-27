@@ -50,6 +50,44 @@
       <div class="text-slate-600">暂无 AI 解析结果（请在“邮件”页点击“手动拉取并解析”）。</div>
     {% endif %}
 
+    {% if processing_status == "pending" and not (state.jira and state.jira.url) %}
+      <div class="border rounded-xl p-3">
+        <div class="text-sm font-medium">生成回信</div>
+
+        {% if not (state.reply_draft and state.reply_draft.reply) %}
+          <form
+            class="mt-3"
+            hx-post="/api/process/reply_generate/{{ email_id }}"
+            hx-target="#process-panel"
+            hx-swap="outerHTML"
+          >
+            <button class="w-full px-3 py-2 rounded-lg bg-white border hover:bg-slate-50 disabled:opacity-50" type="submit" {% if read_only %}disabled{% endif %}>
+              生成回信
+            </button>
+          </form>
+          <div class="text-xs text-slate-500 mt-2">
+            点击后会根据邮件正文语言生成回信；若非中文，会额外给出中文翻译参考。
+          </div>
+        {% else %}
+          <div class="mt-3 space-y-3">
+            <div>
+              <div class="text-xs text-slate-500">回信（原语言：{{ state.reply_draft.language or "-" }}）</div>
+              <textarea class="mt-1 w-full border rounded-lg px-3 py-2 min-h-[140px] whitespace-pre-wrap" readonly>{{ state.reply_draft.reply or "" }}</textarea>
+            </div>
+            {% if state.reply_draft.reply_zh %}
+              <div>
+                <div class="text-xs text-slate-500">中文翻译参考</div>
+                <textarea class="mt-1 w-full border rounded-lg px-3 py-2 min-h-[140px] whitespace-pre-wrap" readonly>{{ state.reply_draft.reply_zh or "" }}</textarea>
+              </div>
+            {% endif %}
+            <div class="text-xs text-slate-500">
+              提示：请复制粘贴到 Gmail 回复框里发送（本工具不会自动发送邮件）。
+            </div>
+          </div>
+        {% endif %}
+      </div>
+    {% endif %}
+
     {% if state.jira and state.jira.url %}
       <div class="border rounded-xl p-3 bg-emerald-50 border-emerald-200">
         <div class="text-sm font-medium text-emerald-900">已创建 Jira</div>
@@ -86,34 +124,31 @@
           </form>
         {% else %}
           <div class="mt-3 text-xs text-slate-500">已生成工单草稿（可在下方编辑后导入 Jira）。</div>
-        {% endif %}
 
-        <form
-          class="mt-3 space-y-3"
-          hx-post="/api/process/jira/{{ email_id }}"
-          hx-target="#process-panel"
-          hx-swap="outerHTML"
-        >
-          <input type="hidden" name="issue_type_name" value="{{ jira_defaults.issue_type_name }}" />
-          <div>
-            <label class="block text-xs text-slate-600 mb-1">Summary</label>
-            <input name="summary" class="w-full px-3 py-2 rounded-lg border" value="{{ jira_defaults.summary }}" />
-          </div>
-          <div>
-            <label class="block text-xs text-slate-600 mb-1">Description</label>
-            <textarea name="description" class="w-full px-3 py-2 rounded-lg border min-h-[180px] whitespace-pre-wrap">{{ jira_defaults.description }}</textarea>
-          </div>
-          <div>
-            <label class="block text-xs text-slate-600 mb-1">Labels（逗号分隔）</label>
-            <input name="labels" class="w-full px-3 py-2 rounded-lg border" value="{{ jira_defaults.labels }}" />
-          </div>
-          <button class="w-full px-3 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-50" type="submit" {% if read_only or not jira_generated %}disabled{% endif %}>
-            一键导入 Jira（创建工单并标记已处理）
-          </button>
-          {% if not jira_generated %}
-            <div class="text-xs text-amber-700">提示：请先点击上方“生成工单”，校验后再导入 Jira。</div>
-          {% endif %}
-        </form>
+          <form
+            class="mt-3 space-y-3"
+            hx-post="/api/process/jira/{{ email_id }}"
+            hx-target="#process-panel"
+            hx-swap="outerHTML"
+          >
+            <input type="hidden" name="issue_type_name" value="{{ jira_defaults.issue_type_name }}" />
+            <div>
+              <label class="block text-xs text-slate-600 mb-1">Summary</label>
+              <input name="summary" class="w-full px-3 py-2 rounded-lg border" value="{{ jira_defaults.summary }}" />
+            </div>
+            <div>
+              <label class="block text-xs text-slate-600 mb-1">Description</label>
+              <textarea name="description" class="w-full px-3 py-2 rounded-lg border min-h-[180px] whitespace-pre-wrap">{{ jira_defaults.description }}</textarea>
+            </div>
+            <div>
+              <label class="block text-xs text-slate-600 mb-1">Labels（逗号分隔）</label>
+              <input name="labels" class="w-full px-3 py-2 rounded-lg border" value="{{ jira_defaults.labels }}" />
+            </div>
+            <button class="w-full px-3 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-50" type="submit" {% if read_only %}disabled{% endif %}>
+              一键导入 Jira（创建工单并标记已处理）
+            </button>
+          </form>
+        {% endif %}
         <div class="text-xs text-slate-500 mt-2">
           成功创建后会把此邮件标记为“已处理”，并保存 Jira 链接到状态文件。
         </div>

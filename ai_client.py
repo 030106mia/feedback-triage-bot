@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import urllib.parse
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Tuple
 
@@ -28,10 +29,38 @@ def _redact_secrets(text: str) -> str:
     if not text:
         return ""
     # openai keys: sk-...
-    text = re.sub(r"\bsk-[A-Za-z0-9]{8,}\b", "sk-***", text)
+    # include hyphens for sk-proj-... style keys
+    text = re.sub(r"\bsk-[A-Za-z0-9_\-]{8,}\b", "sk-***", text)
     # bearer token style
     text = re.sub(r"(Bearer\s+)[A-Za-z0-9\-_\.]{8,}", r"\1***", text, flags=re.IGNORECASE)
     return text
+
+
+def normalize_openai_compatible_base_url(base_url: str) -> str:
+    """
+    容错：
+    - 允许用户误填到 /chat/completions（自动回退到上一级）
+    - 若是 OpenAI 官方域名但没带 /v1，则自动补上
+    """
+    raw = (base_url or "").strip()
+    if not raw:
+        return raw
+
+    raw = raw.rstrip("/")
+    if raw.endswith("/chat/completions"):
+        raw = raw[: -len("/chat/completions")]
+
+    try:
+        u = urllib.parse.urlparse(raw)
+        # only fix the canonical OpenAI host
+        if u.scheme in {"http", "https"} and u.netloc == "api.openai.com":
+            if u.path in {"", "/"}:
+                u = u._replace(path="/v1")
+                raw = urllib.parse.urlunparse(u)
+    except Exception:
+        pass
+
+    return raw.rstrip("/")
 
 
 def ai_config_from_settings(settings: Dict[str, Any]) -> AiConfig:
@@ -50,6 +79,8 @@ def ai_config_from_settings(settings: Dict[str, Any]) -> AiConfig:
     if missing:
         raise AiError(f"Missing AI settings: {', '.join(missing)}")
 
+    if provider == "openai_compatible":
+        base_url = normalize_openai_compatible_base_url(base_url)
     return AiConfig(provider=provider, base_url=base_url.rstrip("/"), api_key=api_key, model=model, prompt=prompt)
 
 
@@ -198,5 +229,69 @@ def generate_jira_draft_openai_compatible(
         summary = str(email.get("subject") or "").strip() or "(no subject)"
 
     return {"summary": summary, "description": description, "labels": labels2}
+
+
+def generate_reply_openai_compatible(
+    cfg: AiConfig,
+    *,
+    email: Dict[str, Any],
+) -> Dict[str, Any]:
+    """
+    根据邮件正文语言生成回信。
+    期望模型返回 JSON：
+      {
+        "language": "zh" | "en" | "ja" | ...,
+        "reply": "...",      // 使用原语言
+        "reply_zh": "..."    // 若原语言非中文，则提供中文翻译参考；否则空字符串
+      }
+    """
+    url = f"{cfg.base_url}/chat/completions"
+    headers = {"Authorization": f"Bearer {cfg.api_key}", "Content-Type": "application/json"}
+
+    variables = {
+        "subject": email.get("subject", ""),
+        "from": email.get("from", ""),
+        "date": email.get("date", ""),
+        "body_text": email.get("body_text", ""),
+    }
+
+    system = (
+        "你是一个客服回信助手。你必须只输出 JSON（不要输出任何额外文本）。"
+        "根据输入邮件正文的语言生成一封合理、礼貌、可直接发送的回信。"
+        "要求："
+        "1) reply 使用与邮件正文相同的语言；"
+        "2) 如果邮件正文不是中文，则额外提供 reply_zh（对 reply 的中文翻译参考）；如果是中文则 reply_zh 置空字符串；"
+        "3) 不要编造承诺（例如退款/时间点/功能已上线），需要时用‘我们会进一步确认/建议你提供更多信息’；"
+        "4) 回信要简洁但完整，包含致谢、回应要点、必要的澄清问题、下一步。"
+        "JSON 字段必须包含 language, reply, reply_zh。"
+    )
+    user = "基于以下输入生成回信：\n" + json.dumps(variables, ensure_ascii=False)
+
+    payload: Dict[str, Any] = {
+        "model": cfg.model,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ],
+        "temperature": 0.3,
+    }
+
+    resp = requests.post(url, headers=headers, json=payload, timeout=60)
+    if resp.status_code >= 400:
+        raise AiError(f"AI request failed ({resp.status_code}): {_redact_secrets(resp.text)[:500]}")
+    data = resp.json()
+    try:
+        content = data["choices"][0]["message"]["content"]
+    except Exception:
+        raise AiError(f"Unexpected AI response: {_redact_secrets(json.dumps(data, ensure_ascii=False))[:500]}")
+    out = _extract_json_from_text(content)
+
+    language = str(out.get("language") or "").strip() or "unknown"
+    reply = str(out.get("reply") or "").strip()
+    reply_zh = str(out.get("reply_zh") or "").strip()
+    if not reply:
+        raise AiError("AI reply generation returned empty reply")
+
+    return {"language": language, "reply": reply, "reply_zh": reply_zh}
 
 

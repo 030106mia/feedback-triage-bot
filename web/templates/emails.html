@@ -1,71 +1,200 @@
 {% extends "base.html" %}
 {% block content %}
-  <div class="bg-white border rounded-xl overflow-hidden">
-    <div class="px-4 py-4 border-b">
-      <div class="flex flex-wrap items-start justify-between gap-3">
-        <div class="space-y-1">
-          <div class="text-lg font-semibold">收件箱 · 反馈分流</div>
-          <div class="text-sm text-slate-600">默认隐藏已处理。用筛选可查看历史。</div>
+  <div class="ui-card">
+    <div class="ui-card-hd px-5 py-5 border-b">
+      <div class="space-y-4">
+        <div class="flex flex-wrap items-start justify-between gap-3">
+          <div class="space-y-1">
+            <div class="text-lg font-semibold tracking-tight">收件箱 · 反馈分流</div>
+            <div class="text-sm text-slate-600">这是“反馈处理工作流”：看 AI 总结 → 决定下一步。</div>
+          </div>
+          <div class="text-xs text-slate-500">共 {{ total }} 封</div>
         </div>
-        <a href="/" class="px-3 py-2 rounded-lg bg-white border hover:bg-slate-50 text-sm">返回 Setup</a>
-      </div>
 
-      <form class="mt-4 flex flex-wrap items-end gap-2" method="get" action="/emails">
-        <div class="min-w-[220px] flex-1">
-          <label class="text-xs text-slate-500">搜索</label>
-          <input name="q" class="mt-1 w-full border rounded-lg px-3 py-2" value="{{ q }}" placeholder="主题 / 发件人" />
+        {# Tabs (use existing status param only) #}
+        {% set s = status or "" %}
+        {% set tab_pending = (s in ["", "active", "pending"]) %}
+        {% set tab_ignore = (s == "ignore") %}
+        {% set tab_processed = (s == "processed") %}
+
+        <div class="flex flex-wrap items-end justify-between gap-3">
+          <div class="flex items-center gap-2">
+            <a class="ui-tab {% if tab_pending %}ui-tab-active{% endif %}" href="/emails?status=pending&q={{ q }}">待处理</a>
+            <a class="ui-tab {% if tab_ignore %}ui-tab-active{% endif %}" href="/emails?status=ignore&q={{ q }}">无需处理</a>
+            <a class="ui-tab {% if tab_processed %}ui-tab-active{% endif %}" href="/emails?status=processed&q={{ q }}">已同步 Jira</a>
+          </div>
+
+          <form class="flex flex-wrap items-end gap-2" method="get" action="/emails">
+            <input type="hidden" name="status" value="{{ 'pending' if tab_pending else (status or 'pending') }}" />
+            <div class="min-w-[220px] flex-1">
+              <label class="text-xs text-slate-500">搜索</label>
+              <input name="q" class="ui-input mt-1" value="{{ q }}" placeholder="主题 / 发件人" />
+            </div>
+            <button class="ui-btn ui-btn-secondary" type="submit">筛选</button>
+          </form>
         </div>
-        <div>
-          <label class="text-xs text-slate-500">状态</label>
-          <select name="status" class="mt-1 border rounded-lg px-3 py-2">
-            <option value="active" {% if status=='active' %}selected{% endif %}>待处理 + 无需处理</option>
-            <option value="pending" {% if status=='pending' %}selected{% endif %}>待处理</option>
-            <option value="ignore" {% if status=='ignore' %}selected{% endif %}>无需处理</option>
-            <option value="processed" {% if status=='processed' %}selected{% endif %}>已处理</option>
-            <option value="all" {% if status=='all' %}selected{% endif %}>全部</option>
-          </select>
-        </div>
-        <div>
-          <label class="text-xs text-slate-500">开始</label>
-          <input name="date_from" type="datetime-local" class="mt-1 border rounded-lg px-3 py-2" value="{{ date_from }}" />
-        </div>
-        <div>
-          <label class="text-xs text-slate-500">结束</label>
-          <input name="date_to" type="datetime-local" class="mt-1 border rounded-lg px-3 py-2" value="{{ date_to }}" />
-        </div>
-        <button class="px-3 py-2 rounded-lg bg-slate-900 text-white hover:bg-slate-800" type="submit">应用</button>
-      </form>
+      </div>
     </div>
 
     {% if emails|length == 0 %}
       <div class="p-6 space-y-3 text-slate-700">
         <div class="text-base font-medium">当前筛选下为空</div>
-        <div class="text-sm text-slate-600">回到首页点击「手动拉取并解析」开始工作流。</div>
-        <a href="/" class="inline-flex px-3 py-2 rounded-lg bg-slate-900 text-white hover:bg-slate-800 text-sm">去首页</a>
+        <div class="text-sm text-slate-600">点击右上角「拉取最新收件」开始拉取并分流。</div>
       </div>
     {% else %}
-      <div class="px-4 py-3 border-b text-sm text-slate-600">
-        共 {{ total }} 封 · 每页 {{ page_size }}
-      </div>
+      <form id="bulk-form" method="post" action="/api/emails/bulk_set_status">
+        <input type="hidden" name="q" value="{{ q }}" />
+        <input type="hidden" name="status" value="{{ status }}" />
+        <input type="hidden" name="page" value="{{ page }}" />
 
-      <div class="divide-y">
-        {% for e in emails %}
-          {% include "partials/email_row.html" %}
-        {% endfor %}
-      </div>
+        <div id="bulk-actions-bar" class="px-4 py-3 border-b bg-white/60 flex flex-wrap items-center justify-between gap-3" style="display:none;">
+          <div class="flex items-center gap-3">
+            <label class="inline-flex items-center gap-2 text-sm text-slate-700 select-none">
+              <input id="bulk-select-all" type="checkbox" class="h-4 w-4 rounded border-slate-300 text-slate-900" />
+              全选
+            </label>
+            <div class="text-sm text-slate-600">
+              已选 <span id="bulk-selected-count" class="font-mono">0</span> 封
+            </div>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <select name="new_status" class="ui-select text-sm">
+              <option value="processed">归档（已处理）</option>
+              <option value="pending">更换为：待处理</option>
+              <option value="ignore">更换为：无需处理</option>
+            </select>
+            <button id="bulk-apply-btn" class="ui-btn ui-btn-primary text-sm disabled:opacity-50" type="submit" disabled>
+              批量应用
+            </button>
+          </div>
+        </div>
 
-      <div class="px-4 py-3 border-t flex items-center justify-between text-sm">
-        <div>第 {{ page }} / {{ total_pages }} 页</div>
+        <div class="p-4 space-y-4">
+          {% for e in emails %}
+            {% include "partials/email_row.html" %}
+          {% endfor %}
+        </div>
+      </form>
+
+      <div class="px-4 py-3 border-t flex items-center justify-between text-sm text-slate-600">
+        <div>第 {{ page }} / {{ total_pages }} 页（每页 50 封）</div>
         <div class="flex items-center gap-2">
           {% if page > 1 %}
-            <a class="px-3 py-2 rounded-lg bg-white border hover:bg-slate-50" href="/emails?q={{ q }}&status={{ status }}&date_from={{ date_from }}&date_to={{ date_to }}&page={{ page - 1 }}">上一页</a>
+            <a class="ui-btn ui-btn-secondary text-sm" href="/emails?q={{ q }}&status={{ status }}&page={{ page - 1 }}">上一页</a>
           {% endif %}
           {% if page < total_pages %}
-            <a class="px-3 py-2 rounded-lg bg-white border hover:bg-slate-50" href="/emails?q={{ q }}&status={{ status }}&date_from={{ date_from }}&date_to={{ date_to }}&page={{ page + 1 }}">下一页</a>
+            <a class="ui-btn ui-btn-secondary text-sm" href="/emails?q={{ q }}&status={{ status }}&page={{ page + 1 }}">下一页</a>
           {% endif %}
         </div>
       </div>
     {% endif %}
   </div>
+
+  <script>
+    (function () {
+      // Default to "pending" if status missing/active (UI requirement: tabs only).
+      try {
+        const u = new URL(window.location.href);
+        const s = u.searchParams.get("status");
+        if (!s || s === "active") {
+          u.searchParams.set("status", "pending");
+          window.history.replaceState({}, "", u.toString());
+        }
+      } catch (e) {}
+
+      const form = document.getElementById("bulk-form");
+      if (!form) return;
+      const selectAll = document.getElementById("bulk-select-all");
+      const countEl = document.getElementById("bulk-selected-count");
+      const applyBtn = document.getElementById("bulk-apply-btn");
+      const bar = document.getElementById("bulk-actions-bar");
+
+      const getChecks = () => Array.from(form.querySelectorAll("input.bulk-email-checkbox"));
+      const update = () => {
+        const checks = getChecks();
+        const checked = checks.filter((c) => c.checked).length;
+        if (countEl) countEl.textContent = String(checked);
+        if (applyBtn) applyBtn.disabled = checked === 0;
+        if (selectAll) selectAll.checked = checked > 0 && checked === checks.length;
+        if (bar) bar.style.display = checked > 0 ? "" : "none";
+      };
+
+      if (selectAll) {
+        selectAll.addEventListener("change", () => {
+          const checks = getChecks();
+          checks.forEach((c) => (c.checked = selectAll.checked));
+          update();
+        });
+      }
+
+      form.addEventListener("change", (e) => {
+        const t = e.target;
+        if (t && t.classList && t.classList.contains("bulk-email-checkbox")) update();
+      });
+
+      // Relative time
+      const rtf = typeof Intl !== "undefined" && Intl.RelativeTimeFormat ? new Intl.RelativeTimeFormat("en", { numeric: "auto" }) : null;
+      const rel = (ts) => {
+        if (!rtf || !ts) return "";
+        const diff = Math.round((Number(ts) * 1000 - Date.now()) / 1000);
+        const abs = Math.abs(diff);
+        const units = [
+          ["day", 86400],
+          ["hour", 3600],
+          ["minute", 60],
+          ["second", 1],
+        ];
+        for (const [u, s] of units) {
+          if (abs >= s || u === "second") return rtf.format(Math.round(diff / s), u);
+        }
+        return "";
+      };
+      document.querySelectorAll("[data-date-ts]").forEach((el) => {
+        const ts = el.getAttribute("data-date-ts");
+        const out = rel(ts);
+        if (out) el.textContent = out;
+      });
+
+      // Lightweight AI-ish tags + one-line summary (UI only; heuristic on subject)
+      const classify = (subject) => {
+        const s = (subject || "").toLowerCase();
+        const has = (re) => re.test(s);
+        if (has(/(crash|bug|error|exception|fail|failed|broken|can't|cannot|unable|无法|失败|崩溃|报错|异常|卡死)/)) return { tag: "Bug", color: "rose" };
+        if (has(/(feature|request|wish|please add|希望|需求|建议|功能)/)) return { tag: "功能需求", color: "blue" };
+        if (has(/(refund|cancel|charge|complain|angry|bad|垃圾|投诉|退订|退款|差评)/)) return { tag: "投诉", color: "amber" };
+        if (has(/(love|great|awesome|thank|thanks|喜欢|好用|感谢|表扬)/)) return { tag: "表扬", color: "emerald" };
+        return { tag: "其他", color: "slate" };
+      };
+
+      document.querySelectorAll("[data-feedback-card]").forEach((card) => {
+        const subj = card.getAttribute("data-subject") || "";
+        const status = card.getAttribute("data-status") || "";
+        const c = classify(subj);
+
+        const tagEl = card.querySelector("[data-ai-tag]");
+        if (tagEl) {
+          tagEl.textContent = c.tag;
+          tagEl.className = "ui-badge " + (
+            c.color === "rose" ? "bg-rose-50 text-rose-700 border-rose-200" :
+            c.color === "blue" ? "bg-sky-50 text-sky-700 border-sky-200" :
+            c.color === "amber" ? "bg-amber-50 text-amber-800 border-amber-200" :
+            c.color === "emerald" ? "bg-emerald-50 text-emerald-700 border-emerald-200" :
+            "bg-slate-50 text-slate-700 border-slate-200"
+          );
+        }
+
+        const sumEl = card.querySelector("[data-ai-summary]");
+        if (sumEl) {
+          const decision =
+            status === "ignore" ? "AI：无需处理" :
+            status === "processed" ? "AI：已同步 Jira（或已归档）" :
+            "AI：建议处理";
+          sumEl.textContent = `${decision} · ${c.tag}（基于标题的快速归类，可在处理页确认）`;
+        }
+      });
+
+      update();
+    })();
+  </script>
 {% endblock %}
 

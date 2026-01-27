@@ -21,16 +21,21 @@
             <label class="text-xs text-slate-500">拉取数量</label>
             <input name="limit" type="number" min="1" max="500" value="50" class="mt-1 w-full border rounded-lg px-3 py-2" />
           </div>
+          <div class="md:col-span-3">
+            <label class="inline-flex items-center gap-2 text-sm text-slate-700 select-none">
+              <input type="checkbox" name="include_from_me" class="rounded border" />
+              包含我发出的（含回复/已发送）
+            </label>
+            <div class="text-xs text-slate-500 mt-1">
+              默认只拉收件：已排除我发出的邮件（含回复），避免把 Sent/自己的回复也拉进来。
+            </div>
+          </div>
           <div class="md:col-span-3 flex justify-end">
             <button class="px-3 py-2 rounded-lg bg-slate-900 text-white hover:bg-slate-800" type="submit">开始拉取并解析</button>
           </div>
         </form>
 
         <div id="fetch-progress"></div>
-
-        <div class="pt-2 flex items-center justify-end gap-2">
-          <a href="/emails" class="px-3 py-2 rounded-lg bg-white border hover:bg-slate-50 text-sm">去列表</a>
-        </div>
       </div>
     </div>
   </div>

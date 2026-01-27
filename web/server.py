@@ -4,6 +4,7 @@ import asyncio
 import json
 import os
 import uuid
+import urllib.parse
 from dataclasses import dataclass
 from datetime import datetime
 from email.utils import parsedate_to_datetime
@@ -19,7 +20,15 @@ from starlette.responses import JSONResponse
 from starlette.middleware.sessions import SessionMiddleware
 
 from fetch_full import fetch_to_out
-from ai_client import AiError, ai_config_from_settings, analyze_email, generate_jira_draft_openai_compatible, AiConfig
+from ai_client import (
+    AiError,
+    ai_config_from_settings,
+    analyze_email,
+    generate_jira_draft_openai_compatible,
+    generate_reply_openai_compatible,
+    AiConfig,
+    normalize_openai_compatible_base_url,
+)
 from gmail_auth import (
     authorization_url,
     build_flow_for_web,
@@ -37,7 +46,17 @@ from jira_client import (
     load_jira_config_from_env,
 )
 from settings_store import DEFAULT_SETTINGS_PATH, load_settings, merge_settings
-from triage_state import DEFAULT_TRIAGE_STATE_DIR, load_state, mark_processed, processing_status, set_jira_link, set_status, upsert_ai_result, upsert_jira_draft
+from triage_state import (
+    DEFAULT_TRIAGE_STATE_DIR,
+    load_state,
+    mark_processed,
+    processing_status,
+    set_jira_link,
+    set_status,
+    upsert_ai_result,
+    upsert_jira_draft,
+    upsert_reply_draft,
+)
 from triage_core import (
     discover_input_files,
     load_json,
@@ -115,6 +134,7 @@ class EmailListItem:
     from_name: str
     date: str
     date_display: str
+    date_ts: float  # parsed email Date header (fallback to mtime)
     has_attachments: bool
     mtime: float
     triage_exists: bool
@@ -150,6 +170,20 @@ def _format_date_display(raw_date: str, mtime: float) -> str:
 
     dt2 = datetime.fromtimestamp(mtime)
     return dt2.strftime("%Y-%m-%d %H:%M")
+
+
+def _date_ts(raw_date: str, fallback_ts: float) -> float:
+    """
+    用于排序/筛选：尽量用邮件 Date header；失败则用文件 mtime。
+    """
+    try:
+        if raw_date:
+            dt = parsedate_to_datetime(raw_date)
+            if dt is not None:
+                return float(dt.timestamp())
+    except Exception:
+        pass
+    return float(fallback_ts)
 
 def _labels_from_text(text: str) -> List[str]:
     parts = [p.strip() for p in (text or "").replace("\n", ",").split(",")]
@@ -249,6 +283,24 @@ def _ai_cfg_for_jira(settings: Dict[str, Any]) -> AiConfig:
     model = (ai.get("model") or "").strip() or "gpt-4o-mini"
     if not api_key:
         raise AiError("Missing AI settings: AI api_key")
+    if provider == "openai_compatible":
+        base_url = normalize_openai_compatible_base_url(base_url)
+    return AiConfig(provider=provider, base_url=base_url.rstrip("/"), api_key=api_key, model=model, prompt="(builtin)")
+
+
+def _ai_cfg_for_reply(settings: Dict[str, Any]) -> AiConfig:
+    """
+    回信生成使用内置 prompt；不依赖 settings.prompt。
+    """
+    ai = settings.get("ai") if isinstance(settings.get("ai"), dict) else {}
+    provider = (ai.get("provider") or "").strip() or "openai_compatible"
+    base_url = (ai.get("base_url") or "").strip() or "https://api.openai.com/v1"
+    api_key = (ai.get("api_key") or "").strip()
+    model = (ai.get("model") or "").strip() or "gpt-4o-mini"
+    if not api_key:
+        raise AiError("Missing AI settings: AI api_key")
+    if provider == "openai_compatible":
+        base_url = normalize_openai_compatible_base_url(base_url)
     return AiConfig(provider=provider, base_url=base_url.rstrip("/"), api_key=api_key, model=model, prompt="(builtin)")
 
 
@@ -303,6 +355,7 @@ def _parse_email_file(path: str) -> Tuple[EmailListItem, Dict[str, Any]]:
         from_name = from_email
     date = _safe_str(email.get("date")) or ""
     date_display = _format_date_display(date, mtime)
+    date_ts = _date_ts(date, mtime)
     attachments = email.get("attachments")
     has_attachments = isinstance(attachments, list) and len(attachments) > 0
     triage_exists = _triage_path(email_id).exists()
@@ -317,6 +370,7 @@ def _parse_email_file(path: str) -> Tuple[EmailListItem, Dict[str, Any]]:
         from_name=from_name,
         date=date,
         date_display=date_display,
+        date_ts=date_ts,
         has_attachments=has_attachments,
         mtime=mtime,
         triage_exists=triage_exists,
@@ -336,6 +390,8 @@ def list_email_items(limit: Optional[int] = None) -> List[EmailListItem]:
         items.append(item)
         if limit is not None and len(items) >= limit:
             break
+    # newest first by email date (fallback to mtime)
+    items.sort(key=lambda e: (e.date_ts, e.mtime), reverse=True)
     return items
 
 
@@ -378,13 +434,13 @@ def home(request: Request) -> HTMLResponse:
             "login.html",
             {"request": request, "token_exists": token_exists(), "error": None},
         )
-    return RedirectResponse(url="/app", status_code=302)
+    return RedirectResponse(url="/emails", status_code=302)
 
 
 @app.get("/app", response_class=HTMLResponse, name="app_home")
 def app_home(request: Request) -> HTMLResponse:
     _require_gmail_login(request)
-    return templates.TemplateResponse("app.html", {"request": request})
+    return RedirectResponse(url="/emails", status_code=302)
 
 
 @app.get("/auth/gmail", name="auth_gmail_start")
@@ -396,7 +452,7 @@ def auth_gmail_start(request: Request):
     """
     if token_exists():
         request.session["gmail_authed"] = True
-        return RedirectResponse(url="/app", status_code=302)
+        return RedirectResponse(url="/emails", status_code=302)
 
     if not credentials_exist():
         return templates.TemplateResponse(
@@ -435,7 +491,7 @@ def auth_gmail_callback(request: Request, code: str | None = None, state: str | 
         )
 
     request.session["gmail_authed"] = True
-    return RedirectResponse(url="/app", status_code=302)
+    return RedirectResponse(url="/emails", status_code=302)
 
 
 @app.post("/auth/gmail/logout", name="auth_gmail_logout")
@@ -527,23 +583,26 @@ def emails_page(
             hay = f"{e.subject} {e.from_name} {e.from_email}".lower()
             if q_norm not in hay:
                 continue
-        # 时间筛选（基于 date_display 的字符串比较不稳；MVP 用 mtime）
+        # 时间筛选：尽量按邮件 Date；失败 fallback 到 mtime
         if date_from:
             try:
                 # 支持 datetime-local: "YYYY-MM-DDTHH:MM"
                 df = datetime.fromisoformat(date_from)
-                if datetime.fromtimestamp(e.mtime) < df:
+                if datetime.fromtimestamp(e.date_ts) < df:
                     continue
             except Exception:
                 pass
         if date_to:
             try:
                 dt = datetime.fromisoformat(date_to)
-                if datetime.fromtimestamp(e.mtime) > dt:
+                if datetime.fromtimestamp(e.date_ts) > dt:
                     continue
             except Exception:
                 pass
         filtered.append(e)
+
+    # newest first by email date_ts
+    filtered.sort(key=lambda x: (x.date_ts, x.mtime), reverse=True)
 
     total = len(filtered)
     start = (page - 1) * page_size
@@ -578,6 +637,58 @@ async def api_email_process(request: Request, email_id: str) -> HTMLResponse:
         raise HTTPException(status_code=403, detail="只读模式下不允许写入状态。")
     await asyncio.to_thread(mark_processed, email_id, state_dir=str(TRIAGE_STATE_DIR))
     return HTMLResponse(content="", status_code=204)
+
+
+def _normalize_processing_status(x: str) -> str:
+    x = (x or "").strip().lower()
+    if x in {"processed", "archive", "archived", "done", "jira"}:
+        return "processed"
+    if x in {"ignore", "skip"}:
+        return "ignore"
+    return "pending"
+
+
+def _emails_url(q: str, status: str, date_from: str, date_to: str, page: int) -> str:
+    params = {
+        "q": q or "",
+        "status": status or "active",
+        "date_from": date_from or "",
+        "date_to": date_to or "",
+        "page": str(int(page or 1)),
+    }
+    return "/emails?" + urllib.parse.urlencode(params)
+
+
+def _bulk_set_status(email_ids: List[str], new_status: str) -> None:
+    for eid in email_ids:
+        eid2 = (eid or "").strip()
+        if not eid2:
+            continue
+        set_status(eid2, new_status, state_dir=str(TRIAGE_STATE_DIR))
+
+
+@app.post("/api/emails/bulk_set_status", response_class=HTMLResponse, name="api_emails_bulk_set_status")
+async def api_emails_bulk_set_status(
+    request: Request,
+    email_ids: List[str] = Form([]),
+    new_status: str = Form("processed"),
+    q: str = Form(""),
+    status: str = Form("active"),
+    date_from: str = Form(""),
+    date_to: str = Form(""),
+    page: int = Form(1),
+) -> HTMLResponse:
+    """
+    邮件列表批量更换状态（归档/待处理/无需处理）。
+    """
+    _require_gmail_login(request)
+    if READ_ONLY:
+        raise HTTPException(status_code=403, detail="只读模式下不允许写入状态。")
+    target = _normalize_processing_status(new_status)
+    ids = [x for x in (email_ids or []) if (x or "").strip()]
+    if ids:
+        await asyncio.to_thread(_bulk_set_status, ids, target)
+    return RedirectResponse(url=_emails_url(q=q, status=status, date_from=date_from, date_to=date_to, page=page), status_code=303)
 
 @app.get("/process/{email_id}", response_class=HTMLResponse, name="process_email")
 def process_email(request: Request, email_id: str) -> HTMLResponse:
@@ -630,7 +741,7 @@ def gmail_fetch_page(request: Request, label: str = "Support收件") -> HTMLResp
     # 兼容旧入口：统一跳回主流程（手动拉取在 /app 的弹层里）
     if not _gmail_authed(request):
         return RedirectResponse(url="/", status_code=302)
-    return RedirectResponse(url="/app", status_code=302)
+    return RedirectResponse(url="/emails", status_code=302)
 
 
 @app.get("/work", response_class=HTMLResponse, name="work_page")
@@ -1142,10 +1253,61 @@ async def api_process_jira_generate(
     )
 
 
+@app.post("/api/process/reply_generate/{email_id}", response_class=HTMLResponse, name="api_process_reply_generate")
+async def api_process_reply_generate(request: Request, email_id: str) -> HTMLResponse:
+    """
+    点击按钮后才生成回信草稿，并落盘到状态文件。
+    """
+    _require_gmail_login(request)
+    if READ_ONLY:
+        raise HTTPException(status_code=403, detail="只读模式下不允许生成回信。请本地运行。")
+
+    email = load_email_by_id(email_id)
+    st = load_state(email_id, state_dir=str(TRIAGE_STATE_DIR)) or {}
+    pstatus = processing_status(st)
+    issue_types = _jira_issue_type_options()
+    jira_defaults = _jira_draft_from_state(st) or _jira_defaults_for_email(email, st, issue_types)
+    jira_generated = _jira_draft_from_state(st) is not None
+
+    warn: Optional[str] = None
+    try:
+        settings = load_settings(path=str(OUT_DIR / "settings.json"))
+        cfg = _ai_cfg_for_reply(settings)
+        out = generate_reply_openai_compatible(cfg, email=email)
+        await asyncio.to_thread(
+            upsert_reply_draft,
+            email_id,
+            language=str(out.get("language") or "unknown"),
+            reply=str(out.get("reply") or ""),
+            reply_zh=str(out.get("reply_zh") or ""),
+            state_dir=str(TRIAGE_STATE_DIR),
+        )
+        st = load_state(email_id, state_dir=str(TRIAGE_STATE_DIR)) or st
+    except Exception as e:
+        warn = f"生成回信失败：{e}"
+
+    return templates.TemplateResponse(
+        "partials/process_panel.html",
+        {
+            "request": request,
+            "email_id": email_id,
+            "email": email,
+            "state": st,
+            "processing_status": pstatus,
+            "read_only": READ_ONLY,
+            "jira_issue_types": issue_types,
+            "jira_defaults": jira_defaults,
+            "jira_generated": jira_generated,
+            "error": warn,
+        },
+    )
+
+
 class FetchParseJob:
-    def __init__(self, job_id: str, limit: int):
+    def __init__(self, job_id: str, limit: int, include_from_me: bool):
         self.job_id = job_id
         self.limit = limit
+        self.include_from_me = include_from_me
         self.total = 0
         self.done = 0
         self.error: Optional[str] = None
@@ -1177,7 +1339,7 @@ async def _run_fetch_parse(job: FetchParseJob, label: str) -> None:
             label=label or None,
             query=None,
             max_results=job.limit,
-            include_from_me=False,
+            include_from_me=job.include_from_me,
             progress_cb=on_progress,
         )
 
@@ -1204,6 +1366,7 @@ async def api_fetch_parse_start(
     request: Request,
     label: str = Form(""),
     limit: int = Form(50),
+    include_from_me: bool = Form(False),
 ) -> HTMLResponse:
     _require_gmail_login(request)
     if READ_ONLY:
@@ -1214,7 +1377,7 @@ async def api_fetch_parse_start(
     label = (label or "").strip() or str(gmail.get("label") or "").strip()
 
     job_id = uuid.uuid4().hex
-    job = FetchParseJob(job_id=job_id, limit=limit)
+    job = FetchParseJob(job_id=job_id, limit=limit, include_from_me=include_from_me)
     FETCH_PARSE_JOBS[job_id] = job
     asyncio.create_task(_run_fetch_parse(job, label))
     return templates.TemplateResponse("partials/fetch_parse_status.html", {"request": request, "job": job})

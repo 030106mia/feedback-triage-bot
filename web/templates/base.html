@@ -6,20 +6,31 @@
     <title>{{ title or "Feedback Triage Bot" }}</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+    <!-- Open-source design tokens (MIT): shadows/radii/animations -->
+    <link rel="stylesheet" href="https://unpkg.com/open-props@1.7.17/open-props.min.css" />
     <link rel="stylesheet" href="/static/v0-tokens.css" />
   </head>
-  <body class="bg-slate-50 text-slate-900">
+  <body class="text-slate-900 antialiased">
     <div class="max-w-6xl mx-auto px-4 py-6">
-      <div class="flex items-center justify-between gap-3 mb-6">
-        <div class="space-y-1">
-          <div class="text-2xl font-semibold">Feedback Triage Bot</div>
-          <div class="text-sm text-slate-600">10 分钟处理完“值得进 Jira”的反馈</div>
+      <div class="ui-topbar px-4 py-3 flex items-center justify-between gap-3 mb-6">
+        <div class="min-w-0">
+          <div class="text-lg font-semibold tracking-tight truncate">Feedback Triage Bot</div>
+          <div class="text-xs text-slate-600 truncate">10 分钟处理完“值得进 Jira”的反馈</div>
         </div>
         <div class="flex items-center gap-2">
           {% if request.session and request.session.get("gmail_authed") %}
-            <a href="/app" class="px-3 py-2 rounded-lg bg-white border hover:bg-slate-50">首页</a>
-            <a href="/emails" class="px-3 py-2 rounded-lg bg-white border hover:bg-slate-50">邮件</a>
-            <a href="/settings" class="px-3 py-2 rounded-lg bg-white border hover:bg-slate-50">设置</a>
+            {% set p = request.url.path if request and request.url else "" %}
+            {% if p.startswith('/emails') %}
+              <button
+                type="button"
+                class="ui-btn ui-btn-accent ui-btn-lg text-sm"
+                hx-get="/partials/fetch_modal"
+                hx-target="body"
+                hx-swap="beforeend"
+              >拉取最新收件</button>
+            {% endif %}
+            <a href="/emails" class="ui-btn {% if p.startswith('/emails') %}ui-btn-primary{% else %}ui-btn-secondary{% endif %}">邮件</a>
+            <a href="/settings" class="ui-btn {% if p.startswith('/settings') %}ui-btn-primary{% else %}ui-btn-secondary{% endif %}">设置</a>
           {% endif %}
         </div>
       </div>

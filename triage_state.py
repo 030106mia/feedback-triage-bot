@@ -190,3 +190,26 @@ def upsert_jira_draft(
     }
     return save_state(email_id, existing, state_dir=state_dir)
 
+
+def upsert_reply_draft(
+    email_id: str,
+    *,
+    language: str,
+    reply: str,
+    reply_zh: str,
+    state_dir: str = DEFAULT_TRIAGE_STATE_DIR,
+) -> Dict[str, Any]:
+    """
+    保存回信草稿：
+    - reply: 按邮件原语言生成的回信
+    - reply_zh: 若原语言非中文，则提供中文翻译参考（可为空）
+    """
+    existing = load_state(email_id, state_dir=state_dir) or {}
+    existing["reply_draft"] = {
+        "language": language,
+        "reply": reply,
+        "reply_zh": reply_zh,
+        "generated_at": _utc_now(),
+    }
+    return save_state(email_id, existing, state_dir=state_dir)
+

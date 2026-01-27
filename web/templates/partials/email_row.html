@@ -1,29 +1,57 @@
-{# Row-style list item (no table) #}
-<div id="email-{{ e.email_id }}" class="group flex items-center gap-3 px-4 py-3 hover:bg-slate-50">
-  <div class="w-[7.5rem] shrink-0">
+{# Feedback card row (UI-only; no backend changes) #}
+<div
+  id="email-{{ e.email_id }}"
+  data-feedback-card
+  data-subject="{{ e.subject }}"
+  data-status="{{ e.processing_status }}"
+  class="group ui-card-item px-4 py-4 flex items-start gap-3"
+>
+  <div class="shrink-0 pt-1 flex items-center justify-center w-6">
+    <input
+      type="checkbox"
+      name="email_ids"
+      value="{{ e.email_id }}"
+      class="bulk-email-checkbox h-4 w-4 rounded border-slate-300 text-slate-900"
+    />
+  </div>
+
+  <div class="shrink-0 pt-0.5">
     {% if e.processing_status == "pending" %}
-      <span class="inline-flex items-center px-2 py-1 rounded-md bg-amber-100 text-amber-800">待处理</span>
+      <span class="ui-badge bg-amber-50 text-amber-800 border-amber-200">待处理</span>
     {% elif e.processing_status == "ignore" %}
-      <span class="inline-flex items-center px-2 py-1 rounded-md bg-slate-100 text-slate-700">无需处理</span>
+      <span class="ui-badge bg-slate-50 text-slate-700 border-slate-200">无需处理</span>
     {% else %}
-      <span class="inline-flex items-center px-2 py-1 rounded-md bg-emerald-100 text-emerald-800">已处理</span>
+      <span class="ui-badge bg-emerald-50 text-emerald-700 border-emerald-200">已创建 Jira</span>
     {% endif %}
   </div>
 
-  <div class="min-w-0 flex-1">
-    <div class="truncate font-medium text-slate-900" title="{{ e.subject }}">{{ e.subject }}</div>
-    <div class="mt-0.5 flex items-center gap-2 text-xs text-slate-600">
-      <span class="truncate" title="{{ e.from_email }}">{{ e.from_name }}</span>
+  <div class="min-w-0 flex-1 space-y-2">
+    <div class="flex flex-wrap items-center gap-2">
+      <span data-ai-tag class="ui-badge bg-slate-50 text-slate-700 border-slate-200">其他</span>
+    </div>
+
+    <div class="text-base font-semibold tracking-tight leading-snug line-clamp-2 text-slate-900" title="{{ e.subject }}">
+      {{ e.subject }}
+    </div>
+
+    <div class="flex items-center gap-2 text-xs text-slate-600">
+      <span class="truncate max-w-[18rem]" title="{{ e.from_email }}">{{ e.from_name }}</span>
       <span class="text-slate-300">•</span>
-      <span class="shrink-0">{{ e.date_display or "-" }}</span>
+      <span class="ui-kbd text-slate-500" data-date-ts="{{ e.date_ts }}" title="{{ e.date_display or e.date or '-' }}">{{ e.date_display or "-" }}</span>
+    </div>
+
+    <div class="text-sm text-slate-500" data-ai-summary>
+      AI：—
     </div>
   </div>
 
-  <div class="shrink-0 flex items-center gap-2">
-    <a href="/email/{{ e.email_id }}" class="px-3 py-2 rounded-lg bg-white border hover:bg-slate-50 text-sm">查看</a>
+  <div class="shrink-0 flex flex-col items-end gap-2 pt-0.5">
     {% if e.processing_status == "pending" %}
-      <a href="/process/{{ e.email_id }}" class="px-3 py-2 rounded-lg bg-slate-900 text-white hover:bg-slate-800 text-sm">处理</a>
+      <a href="/process/{{ e.email_id }}" class="ui-btn ui-btn-primary text-sm w-[7.5rem]">处理</a>
+    {% else %}
+      <span class="ui-btn ui-btn-secondary text-sm w-[7.5rem] opacity-50 cursor-not-allowed select-none">处理</span>
     {% endif %}
+    <a href="/email/{{ e.email_id }}" class="ui-btn ui-btn-ghost text-sm w-[7.5rem]">查看原文</a>
   </div>
 </div>
 
